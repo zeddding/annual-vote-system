@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>年会节目投票</title>
+    <title>年会节目投票 - 身份验证版</title>
     
     <!-- 预加载关键资源 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,7 +32,6 @@
 
         body {
             font-family: 'Microsoft YaHei', sans-serif;
-            /* 投票界面使用呼吸灯效果背景 */
             background: linear-gradient(135deg, 
                 #0b0d17 0%, 
                 #090979 25%, 
@@ -149,6 +148,131 @@
             text-shadow: 0 0 10px var(--neon-blue);
         }
 
+        /* 登录页面样式 */
+        .login-container {
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 20px;
+            padding: 40px;
+            border: 2px solid var(--neon-blue);
+            margin: 40px 0;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 40px rgba(0, 234, 255, 0.3);
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .login-icon {
+            font-size: 4rem;
+            margin-bottom: 30px;
+            text-align: center;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .login-title {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--neon-gold);
+            font-size: 2rem;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .login-message {
+            color: var(--neon-blue);
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            color: var(--neon-blue);
+            margin-bottom: 8px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid var(--neon-blue);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 1.1rem;
+            font-family: 'Microsoft YaHei', sans-serif;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--neon-gold);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .form-control option {
+            background: #0b0d17;
+            color: #fff;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.3rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 20px;
+        }
+
+        .btn-login:hover {
+            transform: scale(1.03);
+            box-shadow: 0 0 30px var(--neon-purple);
+        }
+
+        .btn-login:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .error-message {
+            color: var(--neon-pink);
+            text-align: center;
+            margin-top: 15px;
+            font-size: 1rem;
+            min-height: 24px;
+        }
+
+        .security-note {
+            margin-top: 30px;
+            padding: 15px;
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid var(--neon-gold);
+            border-radius: 10px;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+
         /* 等待投票结果样式 */
         .waiting-container {
             text-align: center;
@@ -165,11 +289,6 @@
             font-size: 5rem;
             margin-bottom: 30px;
             animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-20px); }
         }
 
         .waiting-title {
@@ -241,116 +360,23 @@
             margin: 0 auto 40px;
         }
 
-        /* 投票结果样式 */
-        .results-section {
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 15px;
-            padding: 30px;
-            margin-top: 40px;
-            border: 2px solid var(--neon-blue);
-            box-shadow: 0 0 30px rgba(0, 234, 255, 0.2);
-            backdrop-filter: blur(10px);
-        }
-
-        .results-section h2 {
-            font-family: 'Orbitron', sans-serif;
-            color: var(--neon-gold);
-            text-align: center;
-            margin-bottom: 25px;
-            font-size: 2rem;
-        }
-
-        .results-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .result-item {
-            display: flex;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 15px;
+        .confirmation-details {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
             border-radius: 10px;
-            border-left: 4px solid var(--neon-blue);
-            transition: transform 0.3s ease;
+            margin: 30px auto;
+            max-width: 400px;
+            border: 1px solid var(--neon-blue);
         }
 
-        .result-item:hover {
-            transform: translateX(5px);
+        .confirmation-details p {
+            margin: 10px 0;
+            color: #aaa;
+            font-size: 1rem;
         }
 
-        .result-item.top-3 {
-            border-left-color: var(--neon-gold);
-            background: rgba(255, 215, 0, 0.05);
-        }
-
-        .result-rank {
-            width: 40px;
-            height: 40px;
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-            font-family: 'Orbitron', sans-serif;
-            font-weight: bold;
-            font-size: 1.2rem;
-            border: 2px solid var(--neon-blue);
-        }
-
-        .top-3 .result-rank {
-            border-color: var(--neon-gold);
-            background: rgba(255, 215, 0, 0.1);
-            color: var(--neon-gold);
-        }
-
-        .result-content {
-            flex: 1;
-        }
-
-        .result-title {
-            font-size: 1.1rem;
-            margin-bottom: 5px;
-            color: #fff;
-        }
-
-        .result-votes {
-            font-size: 0.9rem;
+        .confirmation-details strong {
             color: var(--neon-blue);
-        }
-
-        .result-bar {
-            height: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            overflow: hidden;
-            margin-top: 8px;
-            position: relative;
-        }
-
-        .result-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
-            border-radius: 10px;
-            transition: width 1s ease;
-        }
-
-        .top-3 .result-fill {
-            background: linear-gradient(90deg, var(--neon-gold), #ff9500);
-        }
-
-        .result-percentage {
-            position: absolute;
-            right: 10px;
-            top: 0;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            font-size: 0.8rem;
-            color: #fff;
-            font-family: 'Orbitron', sans-serif;
         }
 
         /* 投票界面样式 */
@@ -532,10 +558,150 @@
             font-weight: bold;
         }
 
+        .voter-info {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 1px solid var(--neon-blue);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .voter-name {
+            font-size: 1.2rem;
+            color: var(--neon-gold);
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .device-id {
+            font-size: 0.9rem;
+            color: #aaa;
+            font-family: monospace;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
         #submit-votes-btn {
             display: block;
             margin: 30px auto;
             max-width: 300px;
+        }
+
+        /* 投票结果样式 */
+        .results-section {
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 40px;
+            border: 2px solid var(--neon-blue);
+            box-shadow: 0 0 30px rgba(0, 234, 255, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .results-section h2 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--neon-gold);
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 2rem;
+        }
+
+        .results-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .result-item {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid var(--neon-blue);
+            transition: transform 0.3s ease;
+        }
+
+        .result-item:hover {
+            transform: translateX(5px);
+        }
+
+        .result-item.top-3 {
+            border-left-color: var(--neon-gold);
+            background: rgba(255, 215, 0, 0.05);
+        }
+
+        .result-rank {
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: bold;
+            font-size: 1.2rem;
+            border: 2px solid var(--neon-blue);
+        }
+
+        .top-3 .result-rank {
+            border-color: var(--neon-gold);
+            background: rgba(255, 215, 0, 0.1);
+            color: var(--neon-gold);
+        }
+
+        .result-content {
+            flex: 1;
+        }
+
+        .result-title {
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+
+        .result-votes {
+            font-size: 0.9rem;
+            color: var(--neon-blue);
+        }
+
+        .result-bar {
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 8px;
+            position: relative;
+        }
+
+        .result-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+            border-radius: 10px;
+            transition: width 1s ease;
+        }
+
+        .top-3 .result-fill {
+            background: linear-gradient(90deg, var(--neon-gold), #ff9500);
+        }
+
+        .result-percentage {
+            position: absolute;
+            right: 10px;
+            top: 0;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            font-size: 0.8rem;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
         }
 
         footer {
@@ -567,12 +733,7 @@
             animation: spin 1s linear infinite;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .error-message {
+        .error-message-container {
             text-align: center;
             padding: 30px;
             background: rgba(255, 0, 0, 0.1);
@@ -620,8 +781,18 @@
                 padding: 10px;
             }
             
+            .login-container {
+                padding: 20px;
+            }
+            
             .waiting-title, .confirmation-title {
                 font-size: 2rem;
+            }
+            
+            .voter-info {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
             }
         }
     </style>
@@ -630,11 +801,11 @@
     <div class="container">
         <header>
             <h1>年会节目投票系统</h1>
-            <div class="subtitle" id="status-subtitle">请等待投票开始</div>
+            <div class="subtitle" id="status-subtitle">请先验证您的身份</div>
             <div class="status-bar">
                 <div class="status-indicator">
                     <div class="status-dot" id="status-dot"></div>
-                    <span id="status-text">正在连接投票系统...</span>
+                    <span id="status-text">正在初始化...</span>
                 </div>
                 <div class="time-remaining" id="time-remaining">--:--</div>
             </div>
@@ -644,14 +815,45 @@
             <!-- 加载状态 -->
             <div id="loading" class="loading">
                 <div class="loading-spinner"></div>
-                <span id="loading-text">正在连接投票系统...</span>
+                <span id="loading-text">正在初始化投票系统...</span>
                 <div id="loading-details" style="font-size: 14px; color: #aaa; margin-top: 10px;"></div>
             </div>
 
             <!-- 错误消息 -->
-            <div id="error-message" class="error-message" style="display: none;">
-                无法连接投票系统，请检查网络连接或联系管理员。
+            <div id="error-message" class="error-message-container" style="display: none;">
+                <div id="error-content">无法连接投票系统，请检查网络连接或联系管理员。</div>
                 <button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: var(--neon-blue); color: #000; border: none; border-radius: 5px; cursor: pointer;">重试</button>
+            </div>
+
+            <!-- 登录页面 -->
+            <div id="login-container" class="login-container" style="display: none;">
+                <div class="login-icon">🔐</div>
+                <h2 class="login-title">身份验证</h2>
+                <p class="login-message">请选择您的姓名以进行投票验证</p>
+                
+                <div class="form-group">
+                    <label for="employee-select">选择您的姓名：</label>
+                    <select id="employee-select" class="form-control">
+                        <option value="">请选择...</option>
+                        <!-- 员工列表将通过JavaScript动态生成 -->
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="employee-pin">验证码（可选）：</label>
+                    <input type="text" id="employee-pin" class="form-control" placeholder="如有验证码请在此输入" maxlength="6">
+                </div>
+                
+                <div id="login-error" class="error-message"></div>
+                
+                <button id="login-btn" class="btn-login">开始投票</button>
+                
+                <div class="security-note">
+                    <p>💡 安全提示：</p>
+                    <p>• 每个员工只能投票一次</p>
+                    <p>• 投票记录将与您的姓名关联</p>
+                    <p>• 请勿将您的投票权限给他人使用</p>
+                </div>
             </div>
 
             <!-- 等待投票结果 -->
@@ -674,6 +876,13 @@
                     感谢您的参与！您的投票已成功提交。<br>
                     请等待投票结束查看最终结果。
                 </p>
+                
+                <div class="confirmation-details">
+                    <p><strong>投票人：</strong><span id="confirmed-name"></span></p>
+                    <p><strong>投票时间：</strong><span id="confirmed-time"></span></p>
+                    <p><strong>投票设备：</strong><span id="confirmed-device"></span></p>
+                </div>
+                
                 <div style="color: #aaa; font-size: 1rem; margin-top: 20px;">
                     投票结束后，此页面将自动显示投票结果。
                 </div>
@@ -681,6 +890,11 @@
 
             <!-- 投票界面 -->
             <div id="voting-container" class="voting-container">
+                <div class="voter-info">
+                    <div class="voter-name">投票人：<span id="current-voter-name"></span></div>
+                    <div class="device-id">设备ID：<span id="current-device-id"></span></div>
+                </div>
+                
                 <div class="voting-info">
                     <p>每人最多可投 <span id="max-votes" class="highlight">1</span> 票</p>
                     <p>您已选择 <span id="selected-count" class="highlight">0</span> 个节目</p>
@@ -704,7 +918,7 @@
 
         <footer>
             <p>年会节目投票系统 &copy; 2023 | 技术支持：年会组委会</p>
-            <p style="margin-top: 10px; font-size: 0.8rem; color: #666;">请选择您喜欢的节目，点击按钮投票或取消</p>
+            <p style="margin-top: 10px; font-size: 0.8rem; color: #666;">每个员工限投一次，请谨慎选择您喜欢的节目</p>
         </footer>
     </div>
 
@@ -728,6 +942,8 @@
         let votesRef;
         let controlRef;
         let voteSettingsRef;
+        let employeesRef; // 新增：员工名单引用
+        
         let selectedPrograms = new Set();
         let maxVotesPerUser = 1;
         let isVotingActive = false;
@@ -735,11 +951,13 @@
         let deviceId = null;
         let hasVoted = false;
         let programsData = {};
+        let employeesData = {}; // 新增：员工数据
         let programsListener = null;
         let controlListener = null;
         let lastControlData = null;
         let currentSessionId = null;
         let lastVoteCheckTime = 0;
+        let currentEmployee = null; // 新增：当前投票员工
 
         // 更新加载状态
         function updateLoadingStatus(message, detail = '') {
@@ -750,33 +968,103 @@
             if (loadingDetails && detail) loadingDetails.textContent = detail;
         }
 
-        // 生成设备ID
-        function getDeviceId() {
-            // 生成基于浏览器指纹的唯一ID
-            const generateFingerprint = () => {
-                const components = [
-                    navigator.userAgent,
-                    navigator.language,
-                    screen.colorDepth,
-                    new Date().getTimezoneOffset(),
-                    !!navigator.cpuClass,
-                    navigator.platform,
-                    !!navigator.doNotTrack,
-                    screen.height,
-                    screen.width,
-                    new Date().getTime()
-                ];
-                return components.join('|');
-            };
-            
-            const fingerprint = generateFingerprint();
-            const hash = btoa(fingerprint).substring(0, 20);
-            return 'vote_device_' + hash;
+        // 生成增强设备ID - 结合多个因素
+        function generateEnhancedDeviceId() {
+            try {
+                const components = [];
+                
+                // 1. 浏览器指纹
+                components.push(navigator.userAgent);
+                components.push(navigator.language);
+                components.push(screen.colorDepth);
+                components.push(screen.width + 'x' + screen.height);
+                components.push(new Date().getTimezoneOffset());
+                components.push(navigator.platform);
+                
+                // 2. Canvas指纹（简化版）
+                const canvas = document.createElement('canvas');
+                canvas.width = 200;
+                canvas.height = 50;
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.textBaseline = 'alphabetic';
+                ctx.fillStyle = '#f60';
+                ctx.fillRect(125,1,62,20);
+                ctx.fillStyle = '#069';
+                ctx.fillText('BrowserFingerprint', 2, 15);
+                ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+                ctx.fillText('BrowserFingerprint', 4, 17);
+                
+                const canvasData = canvas.toDataURL();
+                components.push(canvasData.substring(canvasData.length - 100));
+                
+                // 3. WebGL指纹（如果有）
+                if (navigator.gpu) {
+                    components.push('webgl');
+                }
+                
+                // 4. 时间戳（确保唯一性）
+                components.push(Date.now());
+                
+                // 5. 随机数
+                components.push(Math.random().toString(36).substr(2, 9));
+                
+                // 生成哈希
+                const combined = components.join('|');
+                let hash = 0;
+                for (let i = 0; i < combined.length; i++) {
+                    const char = combined.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash = hash & hash; // Convert to 32bit integer
+                }
+                
+                return 'vote_device_' + Math.abs(hash).toString(36) + '_' + Date.now().toString(36).substr(2, 6);
+                
+            } catch (error) {
+                console.error('生成设备ID失败，使用备用方案:', error);
+                // 备用方案
+                return 'vote_device_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 12);
+            }
         }
 
-        // 检查是否已投票 - 修复：检查会话ID是否匹配
+        // 检查URL参数验证合法性
+        function validateURLParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const session = urlParams.get('session');
+            const timestamp = urlParams.get('timestamp');
+            const source = urlParams.get('source');
+            
+            // 检查必需参数
+            if (!session || !timestamp) {
+                return { valid: false, reason: '无效的投票链接' };
+            }
+            
+            // 检查时间戳是否在有效期内（24小时内）
+            const urlTime = parseInt(timestamp);
+            const now = Date.now();
+            const timeDiff = now - urlTime;
+            
+            if (timeDiff > 24 * 60 * 60 * 1000) { // 24小时
+                return { valid: false, reason: '投票链接已过期' };
+            }
+            
+            // 检查来源
+            if (source !== 'official') {
+                return { valid: false, reason: '非官方投票链接' };
+            }
+            
+            return { valid: true, session: session };
+        }
+
+        // 检查是否已投票 - 增强版
         async function checkHasVoted() {
-            const voteKey = `annual_vote_${deviceId}`;
+            if (!currentEmployee) {
+                return false;
+            }
+            
+            // 检查本地存储
+            const voteKey = `annual_vote_${currentEmployee.id}`;
             const voteDataStr = localStorage.getItem(voteKey);
             
             if (!voteDataStr) {
@@ -795,15 +1083,37 @@
                 if (currentSessionId && voteData.sessionId !== currentSessionId) {
                     console.log('会话ID不匹配，清除本地投票记录');
                     localStorage.removeItem(voteKey);
+                    
+                    // 更新Firebase中的员工投票状态
+                    if (currentEmployee && currentEmployee.id) {
+                        await employeesRef.child(currentEmployee.id).update({
+                            hasVoted: false,
+                            voteDevice: null,
+                            voteTime: null,
+                            lastUpdate: Date.now()
+                        });
+                    }
+                    
                     return false;
                 }
                 
-                // 如果投票时间超过24小时，也清除记录（防止永久记录）
+                // 如果投票时间超过24小时，也清除记录
                 const voteTime = voteData.timestamp || 0;
                 const now = Date.now();
                 if (now - voteTime > 24 * 60 * 60 * 1000) {
                     console.log('投票记录超过24小时，清除本地记录');
                     localStorage.removeItem(voteKey);
+                    
+                    // 更新Firebase中的员工投票状态
+                    if (currentEmployee && currentEmployee.id) {
+                        await employeesRef.child(currentEmployee.id).update({
+                            hasVoted: false,
+                            voteDevice: null,
+                            voteTime: null,
+                            lastUpdate: Date.now()
+                        });
+                    }
+                    
                     return false;
                 }
                 
@@ -815,41 +1125,46 @@
             }
         }
 
-        // 标记已投票 - 修复：记录会话ID
-        function markAsVoted(voteData) {
-            const voteKey = `annual_vote_${deviceId}`;
-            // 保存投票数据到localStorage，包括会话ID
+        // 标记已投票 - 增强版
+        async function markAsVoted(voteData) {
+            if (!currentEmployee) return;
+            
+            const voteKey = `annual_vote_${currentEmployee.id}`;
+            
+            // 保存投票数据到localStorage
             localStorage.setItem(voteKey, JSON.stringify({
                 ...voteData,
                 sessionId: currentSessionId,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                employeeId: currentEmployee.id,
+                employeeName: currentEmployee.name
             }));
-            hasVoted = true;
-        }
-
-        // 清除所有用户的本地投票记录（重置投票时调用）
-        function clearAllLocalVotes() {
-            // 无法直接清除所有用户的localStorage，但可以清除当前设备的
-            const keysToRemove = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key.startsWith('annual_vote_')) {
-                    keysToRemove.push(key);
-                }
+            
+            // 更新Firebase中的员工投票状态
+            if (currentEmployee && currentEmployee.id) {
+                await employeesRef.child(currentEmployee.id).update({
+                    hasVoted: true,
+                    voteDevice: deviceId,
+                    voteTime: Date.now(),
+                    lastUpdate: Date.now()
+                });
             }
             
-            keysToRemove.forEach(key => {
-                localStorage.removeItem(key);
-            });
-            
-            console.log(`已清除 ${keysToRemove.length} 个本地投票记录`);
+            hasVoted = true;
         }
 
         // 初始化应用
         document.addEventListener('DOMContentLoaded', async function() {
             try {
+                // 验证URL参数
+                const urlValidation = validateURLParams();
+                if (!urlValidation.valid) {
+                    showError(urlValidation.reason);
+                    return;
+                }
+                
                 // 生成设备ID
-                deviceId = getDeviceId();
+                deviceId = generateEnhancedDeviceId();
                 console.log('设备ID:', deviceId);
                 
                 updateLoadingStatus('正在连接投票系统...');
@@ -859,6 +1174,9 @@
                 
                 updateLoadingStatus('正在初始化投票系统...');
                 await initializeFirebase();
+                
+                // 加载员工名单
+                await loadEmployees();
                 
                 // 监听投票状态变化
                 setupVoteListeners();
@@ -913,12 +1231,155 @@
                 programsRef = db.ref('programs');
                 controlRef = db.ref('vote_control');
                 voteSettingsRef = db.ref('vote_settings');
+                employeesRef = db.ref('employees'); // 员工名单
                 
                 console.log('Firebase初始化成功');
                 
             } catch (error) {
                 console.error('Firebase初始化失败:', error);
                 throw error;
+            }
+        }
+
+        // 加载员工名单
+        async function loadEmployees() {
+            try {
+                if (!employeesRef) {
+                    console.warn('员工名单引用未初始化');
+                    return;
+                }
+                
+                const snapshot = await employeesRef.once('value');
+                employeesData = snapshot.val() || {};
+                
+                console.log(`加载了 ${Object.keys(employeesData).length} 名员工数据`);
+                
+                // 填充员工选择框
+                populateEmployeeSelect();
+                
+                // 显示登录界面
+                showLoginPage();
+                
+            } catch (error) {
+                console.error('加载员工名单失败:', error);
+                showError('无法加载员工名单，请联系管理员');
+            }
+        }
+
+        // 填充员工选择框
+        function populateEmployeeSelect() {
+            const select = document.getElementById('employee-select');
+            select.innerHTML = '<option value="">请选择...</option>';
+            
+            // 按姓名排序
+            const employeesArray = Object.values(employeesData).sort((a, b) => {
+                return a.name.localeCompare(b.name, 'zh-CN');
+            });
+            
+            employeesArray.forEach(employee => {
+                if (!employee.hasVoted) {
+                    const option = document.createElement('option');
+                    option.value = employee.id;
+                    option.textContent = employee.name;
+                    select.appendChild(option);
+                }
+            });
+            
+            // 如果没有未投票的员工，显示提示
+            if (employeesArray.filter(e => !e.hasVoted).length === 0) {
+                select.innerHTML = '<option value="">所有员工均已投票</option>';
+                document.getElementById('login-btn').disabled = true;
+            }
+        }
+
+        // 显示登录页面
+        function showLoginPage() {
+            hideAllContainers();
+            document.getElementById('login-container').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-message').style.display = 'none';
+            
+            // 绑定登录按钮事件
+            document.getElementById('login-btn').addEventListener('click', handleLogin);
+        }
+
+        // 处理登录
+        async function handleLogin() {
+            const select = document.getElementById('employee-select');
+            const pinInput = document.getElementById('employee-pin');
+            const errorDiv = document.getElementById('login-error');
+            const loginBtn = document.getElementById('login-btn');
+            
+            const employeeId = select.value;
+            const pin = pinInput.value.trim();
+            
+            // 验证输入
+            if (!employeeId) {
+                errorDiv.textContent = '请选择您的姓名';
+                return;
+            }
+            
+            // 验证员工是否存在且未投票
+            const employee = employeesData[employeeId];
+            if (!employee) {
+                errorDiv.textContent = '选择的员工不存在';
+                return;
+            }
+            
+            if (employee.hasVoted) {
+                errorDiv.textContent = '该员工已投票，每人限投一次';
+                return;
+            }
+            
+            // 可选验证码验证
+            if (pin && employee.pinCode && employee.pinCode !== pin) {
+                errorDiv.textContent = '验证码错误';
+                return;
+            }
+            
+            // 禁用登录按钮防止重复点击
+            loginBtn.disabled = true;
+            loginBtn.textContent = '验证中...';
+            
+            try {
+                // 设置当前员工
+                currentEmployee = {
+                    id: employeeId,
+                    name: employee.name,
+                    ...employee
+                };
+                
+                // 检查是否已投票
+                hasVoted = await checkHasVoted();
+                
+                if (hasVoted) {
+                    errorDiv.textContent = '您已经投过票了';
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = '开始投票';
+                    return;
+                }
+                
+                // 登录成功，进入投票流程
+                console.log(`员工 ${employee.name} 登录成功`);
+                
+                // 更新UI显示当前投票人
+                document.getElementById('current-voter-name').textContent = employee.name;
+                document.getElementById('current-device-id').textContent = deviceId.substring(0, 16) + '...';
+                
+                // 根据投票状态显示相应界面
+                if (isVotingActive && !hasVoted) {
+                    loadVotingInterface();
+                } else if (hasVoted) {
+                    showConfirmationPage();
+                } else {
+                    showWaitingForVote();
+                }
+                
+            } catch (error) {
+                console.error('登录失败:', error);
+                errorDiv.textContent = '登录失败，请重试';
+                loginBtn.disabled = false;
+                loginBtn.textContent = '开始投票';
             }
         }
 
@@ -941,51 +1402,48 @@
                     lastControlData = controlData;
                     currentSessionId = controlData.sessionId;
                     
-                    // 检查是否已投票（异步）
-                    const now = Date.now();
-                    if (now - lastVoteCheckTime > 5000) { // 每5秒检查一次
-                        lastVoteCheckTime = now;
-                        hasVoted = await checkHasVoted();
-                    }
-                    
                     isVotingActive = controlData.isActive || false;
                     
                     updateStatusUI();
                     
-                    // 根据状态显示相应界面
-                    if (hasVoted) {
-                        // 如果已投票，显示确认页面
-                        showConfirmationPage();
-                    } else if (isVotingActive) {
-                        // 投票进行中且未投票，显示投票界面
-                        loadVotingInterface();
-                    } else {
-                        // 投票未开始或已结束
-                        if (controlData.endTime) {
-                            // 使用主系统提供的服务器时间计算
-                            const serverTimeNow = controlData.serverTime ? 
-                                controlData.serverTime + (Date.now() - controlData.lastUpdate) : 
-                                Date.now();
-                            
-                            if (serverTimeNow > controlData.endTime) {
-                                // 投票已结束，显示结果
-                                loadFinalResults();
+                    // 根据状态显示相应界面（如果已登录）
+                    if (currentEmployee) {
+                        // 检查是否已投票
+                        const now = Date.now();
+                        if (now - lastVoteCheckTime > 5000) {
+                            lastVoteCheckTime = now;
+                            hasVoted = await checkHasVoted();
+                        }
+                        
+                        if (hasVoted) {
+                            showConfirmationPage();
+                        } else if (isVotingActive) {
+                            loadVotingInterface();
+                        } else {
+                            if (controlData.endTime) {
+                                const serverTimeNow = controlData.serverTime ? 
+                                    controlData.serverTime + (Date.now() - controlData.lastUpdate) : 
+                                    Date.now();
+                                
+                                if (serverTimeNow > controlData.endTime) {
+                                    loadFinalResults();
+                                } else {
+                                    showWaitingForVote();
+                                }
                             } else {
-                                // 投票未开始，显示等待
                                 showWaitingForVote();
                             }
-                        } else {
-                            // 投票未开始，显示等待
-                            showWaitingForVote();
                         }
+                        
+                        // 更新时间显示
+                        updateTimeDisplay();
                     }
-                    
-                    // 更新时间显示
-                    updateTimeDisplay();
                     
                 } else {
                     // 没有控制数据，默认显示等待
-                    showWaitingForVote();
+                    if (currentEmployee) {
+                        showWaitingForVote();
+                    }
                 }
             }, (error) => {
                 console.error('监听投票状态失败:', error);
@@ -1014,11 +1472,14 @@
             if (isVotingActive) {
                 statusDot.classList.add('active');
                 statusText.textContent = '投票进行中';
-                subtitle.textContent = '请选择您喜欢的节目';
+                if (currentEmployee) {
+                    subtitle.textContent = `${currentEmployee.name}，请选择您喜欢的节目`;
+                } else {
+                    subtitle.textContent = '请选择您喜欢的节目';
+                }
             } else {
                 statusDot.classList.remove('active');
                 if (lastControlData && lastControlData.endTime) {
-                    // 使用主系统提供的服务器时间计算
                     const serverTimeNow = lastControlData.serverTime ? 
                         lastControlData.serverTime + (Date.now() - lastControlData.lastUpdate) : 
                         Date.now();
@@ -1028,11 +1489,11 @@
                         subtitle.textContent = '投票结果';
                     } else {
                         statusText.textContent = '投票未开始';
-                        subtitle.textContent = '请等待投票开始';
+                        subtitle.textContent = currentEmployee ? `${currentEmployee.name}，请等待投票开始` : '请等待投票开始';
                     }
                 } else {
                     statusText.textContent = '投票未开始';
-                    subtitle.textContent = '请等待投票开始';
+                    subtitle.textContent = currentEmployee ? `${currentEmployee.name}，请等待投票开始` : '请等待投票开始';
                 }
             }
         }
@@ -1061,23 +1522,36 @@
             document.getElementById('loading').style.display = 'none';
             document.getElementById('error-message').style.display = 'none';
             
+            // 更新确认页面信息
+            if (currentEmployee) {
+                document.getElementById('confirmed-name').textContent = currentEmployee.name;
+                document.getElementById('confirmed-time').textContent = new Date().toLocaleString('zh-CN');
+                document.getElementById('confirmed-device').textContent = deviceId.substring(0, 12) + '...';
+            }
+            
             // 如果投票已结束，显示结果
             if (lastControlData && lastControlData.endTime) {
-                // 使用主系统提供的服务器时间计算
                 const serverTimeNow = lastControlData.serverTime ? 
                     lastControlData.serverTime + (Date.now() - lastControlData.lastUpdate) : 
                     Date.now();
                 
                 if (serverTimeNow > lastControlData.endTime) {
-                    loadFinalResults();
+                    // 延迟加载结果，让用户看到确认信息
+                    setTimeout(() => {
+                        loadFinalResults();
+                    }, 3000);
                 }
             }
         }
 
         // 加载投票界面
         function loadVotingInterface() {
-            if (hasVoted) {
-                showConfirmationPage();
+            if (!currentEmployee || hasVoted) {
+                if (!currentEmployee) {
+                    showLoginPage();
+                } else {
+                    showConfirmationPage();
+                }
                 return;
             }
             
@@ -1111,6 +1585,7 @@
             const containers = [
                 'loading',
                 'error-message',
+                'login-container',
                 'waiting-container',
                 'confirmation-container',
                 'voting-container',
@@ -1125,7 +1600,7 @@
             });
         }
 
-        // 更新时间显示 - 使用主系统提供的服务器时间
+        // 更新时间显示
         function updateTimeDisplay() {
             const timeElement = document.getElementById('time-remaining');
             
@@ -1295,6 +1770,11 @@
         // 提交投票
         async function submitVotes() {
             try {
+                if (!currentEmployee) {
+                    showMessage('请先登录');
+                    return;
+                }
+                
                 if (selectedPrograms.size === 0) {
                     showMessage('请至少选择一个节目');
                     return;
@@ -1321,7 +1801,7 @@
                 submitBtn.disabled = true;
                 submitBtn.textContent = '提交中...';
                 
-                // 获取当前时间（使用主系统提供的服务器时间）
+                // 获取当前时间
                 const now = Date.now();
                 const serverTimeNow = lastControlData.serverTime ? 
                     lastControlData.serverTime + (now - lastControlData.lastUpdate) : 
@@ -1329,6 +1809,8 @@
                 
                 // 准备投票数据
                 const voteData = {
+                    employeeId: currentEmployee.id,
+                    employeeName: currentEmployee.name,
                     deviceId: deviceId,
                     selectedPrograms: Array.from(selectedPrograms),
                     timestamp: serverTimeNow,
@@ -1351,12 +1833,12 @@
                 // 等待所有更新完成
                 await Promise.all(updatePromises);
                 
-                // 保存投票记录到本地
-                markAsVoted(voteData);
+                // 保存投票记录到本地和Firebase
+                await markAsVoted(voteData);
                 
-                // 保存投票记录到Firebase（可选，用于统计）
+                // 保存投票记录到Firebase（用于统计）
                 try {
-                    await votesRef.child(deviceId).set(voteData);
+                    await votesRef.child(currentEmployee.id).set(voteData);
                 } catch (error) {
                     console.warn('保存投票记录到云端失败:', error);
                     // 不阻止用户投票成功
@@ -1462,13 +1944,9 @@
             document.getElementById('error-message').style.display = 'block';
             document.getElementById('loading').style.display = 'none';
             
-            const errorDiv = document.getElementById('error-message');
+            const errorDiv = document.getElementById('error-content');
             if (errorDiv) {
-                const originalContent = errorDiv.innerHTML;
-                errorDiv.innerHTML = `
-                    <div style="margin-bottom: 10px;">${message}</div>
-                    ${originalContent}
-                `;
+                errorDiv.textContent = message;
             }
         }
     </script>
