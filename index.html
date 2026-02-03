@@ -1,29 +1,13 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js"></script>
-
-<script>
-  // 你的Firebase配置
-  const firebaseConfig = {
-    apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
-    authDomain: "annual-vote.firebaseapp.com",
-    databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "annual-vote",
-    storageBucket: "annual-vote.firebasestorage.app",
-    messagingSenderId: "733592758408",
-    appId: "1:733592758408:web:e5f5212a8392f298eb573d",
-    measurementId: "G-KDQ31YVGGX"
-  };
-
-  // 初始化Firebase
-  firebase.initializeApp(firebaseConfig);
-</script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D年会抽奖系统 - 本地极速版</title>
+    
+    <!-- Firebase SDK 使用兼容版本 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
@@ -34,7 +18,6 @@
     <script src="./xlsx.full.min.js"></script>
     <script src="./umd.js"></script>
     <script src="./confetti.min.js"></script>
-    <script src="server-check.js"></script>
 
     <style>
         /* === 核心变量 === */
@@ -432,6 +415,26 @@
     let objectUrls = [];
     let effectsInterval = null, coinInterval = null, fireInterval = null;    
 
+    // Firebase相关变量
+    let db = null;
+    let votesRef = null;
+    let programsRef = null;
+    let controlRef = null;
+
+    // 初始化节目数据
+    const initialPrograms = [
+        { id: 1, title: "开场舞蹈《未来之光》", votes: 0 },
+        { id: 2, title: "歌曲串烧《岁月如歌》", votes: 0 },
+        { id: 3, title: "小品《办公室的故事》", votes: 0 },
+        { id: 4, title: "魔术表演《梦幻之夜》", votes: 0 },
+        { id: 5, title: "乐器合奏《星空交响》", votes: 0 },
+        { id: 6, title: "创意走秀《时尚前沿》", votes: 0 },
+        { id: 7, title: "相声《职场那些事儿》", votes: 0 },
+        { id: 8, title: "合唱《明天会更好》", votes: 0 },
+        { id: 9, title: "舞蹈《古风雅韵》", votes: 0 },
+        { id: 10, title: "舞台剧《我们的故事》", votes: 0 }
+    ];
+
     // === 极速头像生成引擎 ===
     function generateAvatar(name) {
         const canvas = document.createElement('canvas');
@@ -481,8 +484,12 @@
             setTimeout(() => { document.getElementById('loader').style.opacity = 0; }, 300);
             setTimeout(() => { document.getElementById('loader').style.display = 'none'; }, 800);
             
-            // 初始化投票系统
-            initFirebaseVoteSystem();
+            // 延迟初始化投票系统
+            setTimeout(() => {
+                initFirebaseVoteSystem().catch(err => {
+                    console.warn('Firebase投票系统初始化失败，但抽奖系统可以继续使用:', err);
+                });
+            }, 1000);
         }, 300);
     };
 
@@ -857,26 +864,6 @@
     
     // ==================== Firebase投票功能 ====================
 
-    // Firebase数据库引用
-    const db = firebase.database();
-    const votesRef = db.ref('votes');
-    const programsRef = db.ref('programs');
-    const controlRef = db.ref('vote_control');
-
-    // 初始化节目数据
-    const initialPrograms = [
-        { id: 1, title: "开场舞蹈《未来之光》", votes: 0 },
-        { id: 2, title: "歌曲串烧《岁月如歌》", votes: 0 },
-        { id: 3, title: "小品《办公室的故事》", votes: 0 },
-        { id: 4, title: "魔术表演《梦幻之夜》", votes: 0 },
-        { id: 5, title: "乐器合奏《星空交响》", votes: 0 },
-        { id: 6, title: "创意走秀《时尚前沿》", votes: 0 },
-        { id: 7, title: "相声《职场那些事儿》", votes: 0 },
-        { id: 8, title: "合唱《明天会更好》", votes: 0 },
-        { id: 9, title: "舞蹈《古风雅韵》", votes: 0 },
-        { id: 10, title: "舞台剧《我们的故事》", votes: 0 }
-    ];
-
     // 初始化Firebase投票数据
     async function initFirebaseVoteData() {
         try {
@@ -1076,6 +1063,37 @@
     // 初始化Firebase投票系统
     async function initFirebaseVoteSystem() {
         try {
+            // 检查Firebase SDK是否加载
+            if (typeof firebase === 'undefined') {
+                console.error('Firebase SDK 未加载');
+                throw new Error('Firebase SDK 未加载');
+            }
+            
+            // Firebase配置
+            const firebaseConfig = {
+                apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
+                authDomain: "annual-vote.firebaseapp.com",
+                databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
+                projectId: "annual-vote",
+                storageBucket: "annual-vote.firebasestorage.app",
+                messagingSenderId: "733592758408",
+                appId: "1:733592758408:web:e5f5212a8392f298eb573d",
+                measurementId: "G-KDQ31YVGGX"
+            };
+            
+            // 初始化Firebase
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            
+            // 初始化数据库引用
+            db = firebase.database();
+            votesRef = db.ref('votes');
+            programsRef = db.ref('programs');
+            controlRef = db.ref('vote_control');
+            
+            console.log('Firebase初始化成功');
+            
             await initFirebaseVoteData();
             listenToVotes();
             
@@ -1095,13 +1113,19 @@
     function openVotePanel() {
         document.getElementById('vote-modal').style.display = 'flex';
         // 重新加载数据
-        programsRef.once('value').then(snapshot => {
-            const programsData = snapshot.val();
-            if (programsData) {
-                const programsArray = Object.values(programsData);
-                renderVoteResults(programsArray);
-            }
-        });
+        if (programsRef) {
+            programsRef.once('value').then(snapshot => {
+                const programsData = snapshot.val();
+                if (programsData) {
+                    const programsArray = Object.values(programsData);
+                    renderVoteResults(programsArray);
+                }
+            });
+        } else {
+            // 如果Firebase未初始化，显示提示
+            document.getElementById('vote-results').innerHTML = 
+                '<div style="text-align:center; padding:50px; color:#aaa;">投票系统正在初始化，请稍候...</div>';
+        }
     }
     
     // 关闭投票面板
