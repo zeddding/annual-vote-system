@@ -714,6 +714,172 @@
                 updateUI();
             }
         });
-    </script>
+// 在vote.html中添加Firebase配置和投票逻辑
+const firebaseConfig = {
+    apiKey: "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    authDomain: "annual-vote-system.firebaseapp.com",
+    databaseURL: "https://annual-vote-system.firebaseio.com",
+    projectId: "annual-vote-system",
+    storageBucket: "annual-vote-system.appspot.com",
+    messagingSenderId: "1234567890",
+    appId: "1:1234567890:web:abc123def456ghi789jkl"
+};
+
+// 初始化Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// 生成用户ID
+function generateUserId() {
+    let userId = localStorage.getItem('vote_user_id');
+    if (!userId) {
+        userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('vote_user_id', userId);
+    }
+    return userId;
+}
+
+// 检查用户是否已投票
+async function checkUserVotes(userId) {
+    const snapshot = await db.ref('votes').orderByChild('userId').equalTo(userId).once('value');
+    return snapshot.exists() ? Object.keys(snapshot.val()).length : 0;
+}
+
+// 提交投票
+async function submitVote(programId) {
+    const userId = generateUserId();
+    
+    // 检查用户是否已投5票
+    const userVoteCount = await checkUserVotes(userId);
+    if (userVoteCount >= 5) {
+        alert('您已用完所有投票次数！');
+        return false;
+    }
+    
+    // 检查是否已为该节目投票
+    const existingVote = await db.ref('votes')
+        .orderByChild('userId')
+        .equalTo(userId)
+        .once('value');
+    
+    if (existingVote.exists()) {
+        const votes = existingVote.val();
+        const alreadyVoted = Object.values(votes).some(vote => vote.programId === programId);
+        if (alreadyVoted) {
+            alert('您已经为该节目投过票了！');
+            return false;
+        }
+    }
+    
+    // 提交投票
+    const voteData = {
+        userId: userId,
+        programId: programId,
+        timestamp: Date.now(),
+        userAgent: navigator.userAgent
+    };
+    
+    try {
+        // 添加投票记录
+        await db.ref('votes').push(voteData);
+        
+        // 更新节目票数
+        const programRef = db.ref('programs').child(programId);
+        const programSnapshot = await programRef.once('value');
+        const currentVotes = programSnapshot.val().votes || 0;
+        
+        await programRef.update({
+            votes: currentVotes + 1,
+            lastUpdate: Date.now()
+        });
+        
+        return true;
+    } catch (error) {
+        console.error('投票失败:', error);
+        return false;
+    }
+}
+
+// 监听投票状态
+function listenToVoteStatus() {
+    db.ref('vote_control').on('value', (snapshot) => {
+        const controlData = snapshot.val();
+        if (controlData) {
+            updateVoteUI(controlData);
+        }
+    });
+}
+
+// 更新投票页面UI
+function updateVoteUI(controlData) {
+    const startBtn = document.getElementById('start-vote-btn');
+    const statusText = document.getElementById('status-text');
+    const timerElement = document.getElementById('timer');
+    
+    if (controlData.isActive) {
+        startBtn.disabled = true;
+        startBtn.textContent = '投票进行中...';
+        statusText.textContent = '投票进行中，请为您喜爱的节目投票！';
+        
+        // 更新倒计时
+        if (controlData.endTime) {
+            const updateTimer = () => {
+                const remaining = Math.max(0, Math.floor((controlData.endTime - Date.now()) / 1000));
+                const minutes = Math.floor(remaining / 60);
+                const seconds = remaining % 60;
+                timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                if (remaining <= 10) {
+                    timerElement.style.color = 'var(--neon-pink)';
+                    timerElement.style.animation = 'pulse 0.5s infinite';
+                }
+                
+                if (remaining > 0) {
+                    setTimeout(updateTimer, 1000);
+                }
+            };
+            updateTimer();
+        }
+    } else {
+        startBtn.disabled = true;
+        startBtn.textContent = '等待主屏幕开始投票';
+        statusText.textContent = '等待开始投票...';
+        timerElement.textContent = '02:00';
+    }
+}
+
+// 初始化投票页面
+function initVotePage() {
+    const userId = generateUserId();
+    console.log('用户ID:', userId);
+    
+    listenToVoteStatus();
+    
+    // 为每个投票按钮添加事件
+    document.querySelectorAll('.vote-btn').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const programId = parseInt(this.getAttribute('data-id'));
+            const success = await submitVote(programId);
+            
+            if (success) {
+                // 更新UI
+                this.disabled = true;
+                this.textContent = '已投票 ✓';
+                this.classList.add('voted');
+                
+                // 更新剩余票数
+                const userVoteCount = await checkUserVotes(userId);
+                document.getElementById('votes-remaining').textContent = 5 - userVoteCount;
+                
+                // 播放音效
+                playVoteSound();
+            }
+        });
+    });
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', initVotePage);
+</script>
 </body>
 </html>
