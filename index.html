@@ -602,6 +602,7 @@
     let voteTimer = null;
     let voteControlListener = null;
     let programsListener = null;
+    let lastServerTimeOffset = 0;
 
     // 默认节目数据
     const defaultPrograms = [
@@ -1119,6 +1120,33 @@
     }
     
     // ==================== Firebase投票功能 ====================
+    
+    // 获取服务器时间偏移量
+    async function getServerTimeOffset() {
+        try {
+            if (!voteDb) return 0;
+            
+            const startTime = Date.now();
+            const offsetRef = voteDb.ref('.info/serverTimeOffset');
+            const snapshot = await offsetRef.once('value');
+            const offset = snapshot.val() || 0;
+            
+            // 计算网络延迟并调整
+            const latency = Date.now() - startTime;
+            const adjustedOffset = offset - (latency / 2);
+            
+            lastServerTimeOffset = adjustedOffset;
+            return adjustedOffset;
+        } catch (error) {
+            console.warn('获取服务器时间偏移失败:', error);
+            return 0;
+        }
+    }
+    
+    // 获取服务器时间
+    function getServerTime() {
+        return Date.now() + lastServerTimeOffset;
+    }
 
     // 初始化Firebase投票数据
     async function initFirebaseVoteData() {
@@ -1129,7 +1157,7 @@
                 await voteSettingsRef.set({
                     votesPerUser: 1,
                     voteDuration: 2, // 分钟
-                    lastUpdate: Date.now()
+                    lastUpdate: getServerTime()
                 });
             }
             
@@ -1139,7 +1167,7 @@
                 const initPromises = defaultPrograms.map(program => {
                     return programsRef.child(program.id).set({
                         ...program,
-                        lastUpdate: Date.now()
+                        lastUpdate: getServerTime()
                     });
                 });
                 await Promise.all(initPromises);
@@ -1166,7 +1194,7 @@
                     const reinitPromises = Object.values(uniquePrograms).map(program => {
                         return programsRef.child(program.id).set({
                             ...program,
-                            lastUpdate: Date.now()
+                            lastUpdate: getServerTime()
                         });
                     });
                     await Promise.all(reinitPromises);
@@ -1308,8 +1336,11 @@
             const settings = settingsSnapshot.val() || {};
             const durationMinutes = settings.voteDuration || 2;
             
+            // 获取服务器时间偏移量
+            await getServerTimeOffset();
+            
             // 使用服务器时间而不是本地时间
-            const serverTime = Date.now();
+            const serverTime = getServerTime();
             const endTime = serverTime + (durationMinutes * 60000);
             
             await controlRef.set({
@@ -1332,7 +1363,7 @@
             }
             
             // 启动实时计时器（使用更短的时间间隔提高精度）
-            voteTimer = setInterval(updateVoteTimeDisplay, 500);
+            voteTimer = setInterval(updateVoteTimeDisplay, 1000);
             
             // 立即更新一次
             setTimeout(updateVoteTimeDisplay, 100);
@@ -1358,8 +1389,8 @@
                 return;
             }
             
-            const now = Date.now();
-            const remaining = Math.max(0, controlData.endTime - now);
+            const serverTime = getServerTime();
+            const remaining = Math.max(0, controlData.endTime - serverTime);
             
             if (remaining <= 0) {
                 // 投票结束
@@ -1368,6 +1399,11 @@
                     clearInterval(voteTimer);
                     voteTimer = null;
                 }
+                // 自动更新控制状态
+                await controlRef.update({
+                    isActive: false,
+                    lastUpdate: serverTime
+                });
                 return;
             }
             
@@ -1385,10 +1421,13 @@
     // 结束投票（使用Firebase）
     async function stopFirebaseVoting() {
         try {
+            await getServerTimeOffset();
+            const serverTime = getServerTime();
+            
             await controlRef.update({
                 isActive: false,
-                endTime: Date.now(),
-                lastUpdate: Date.now()
+                endTime: serverTime,
+                lastUpdate: serverTime
             });
             
             if (voteTimer) {
@@ -1416,7 +1455,7 @@
                 const resetPromises = Object.keys(programsData).map(async (programId) => {
                     await programsRef.child(programId).update({
                         votes: 0,
-                        lastUpdate: Date.now()
+                        lastUpdate: getServerTime()
                     });
                 });
                 await Promise.all(resetPromises);
@@ -1427,7 +1466,7 @@
                 // 重置控制状态
                 await controlRef.set({
                     isActive: false,
-                    lastUpdate: Date.now()
+                    lastUpdate: getServerTime()
                 });
                 
                 if (voteTimer) {
@@ -1495,6 +1534,9 @@
                     console.log('Firebase连接断开');
                 }
             });
+            
+            // 获取服务器时间偏移量
+            await getServerTimeOffset();
             
             await initFirebaseVoteData();
             listenToVotes();
@@ -1671,7 +1713,7 @@
             await voteSettingsRef.set({
                 votesPerUser: Math.min(Math.max(votesPerUser, 1), 10),
                 voteDuration: Math.min(Math.max(voteDuration, 1), 30),
-                lastUpdate: Date.now()
+                lastUpdate: getServerTime()
             });
             
             // 保存节目列表
@@ -1698,7 +1740,7 @@
                             ...existingPrograms[programId],
                             title: title,
                             description: description,
-                            lastUpdate: Date.now()
+                            lastUpdate: getServerTime()
                         };
                         usedIds.add(parseInt(programId));
                     } else {
@@ -1712,7 +1754,7 @@
                             title: title,
                             description: description,
                             votes: 0,
-                            lastUpdate: Date.now()
+                            lastUpdate: getServerTime()
                         };
                         usedIds.add(newId);
                     }
@@ -1745,7 +1787,7 @@
                 await voteSettingsRef.set({
                     votesPerUser: 1,
                     voteDuration: 2,
-                    lastUpdate: Date.now()
+                    lastUpdate: getServerTime()
                 });
                 
                 // 重置节目列表
