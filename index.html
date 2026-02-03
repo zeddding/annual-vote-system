@@ -599,12 +599,10 @@
     let programsRef = null;
     let controlRef = null;
     let voteSettingsRef = null;
-    let employeesRef = null; // 新增：员工名单引用
     let voteTimer = null;
     let voteControlListener = null;
     let programsListener = null;
     let lastServerTimeOffset = 0;
-    let voteSessionId = null; // 投票会话ID，用于标记重置投票
 
     // 默认节目数据
     const defaultPrograms = [
@@ -1207,42 +1205,6 @@
         }
     }
 
-    // 同步员工名单到Firebase
-    async function syncEmployeesToFirebase() {
-        try {
-            if (!employeesRef) return;
-            
-            // 从本地存储中获取员工名单
-            const data = await idbKeyval.get(DB_KEY);
-            if (!data || !data.members) {
-                console.warn('没有找到员工名单数据');
-                return;
-            }
-            
-            // 转换员工数据格式
-            const employees = {};
-            data.members.forEach((member, index) => {
-                // 生成唯一员工ID
-                const employeeId = `emp_${Date.now()}_${index}`;
-                employees[employeeId] = {
-                    name: member.name,
-                    employeeId: employeeId,
-                    hasVoted: false,
-                    voteDevice: null,
-                    voteTime: null,
-                    lastUpdate: getServerTime()
-                };
-            });
-            
-            // 同步到Firebase
-            await employeesRef.set(employees);
-            console.log(`已同步 ${data.members.length} 名员工数据到Firebase`);
-            
-        } catch (error) {
-            console.error('同步员工名单失败:', error);
-        }
-    }
-
     // 监听投票数据变化 - 修复重复问题
     function listenToVotes() {
         // 移除旧的监听器（如果有）
@@ -1381,20 +1343,16 @@
             const serverTime = getServerTime();
             const endTime = serverTime + (durationMinutes * 60000);
             
-            // 生成新的投票会话ID
-            voteSessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-            
             await controlRef.set({
                 isActive: true,
                 startTime: serverTime,
                 endTime: endTime,
                 lastUpdate: serverTime,
-                sessionId: voteSessionId,
-                // 添加一个时间戳，用于投票系统时间同步
-                serverTime: serverTime
+                // 添加唯一标识，防止重复触发
+                sessionId: Date.now().toString(36) + Math.random().toString(36).substr(2)
             });
             
-            console.log(`投票开始: ${new Date(serverTime).toLocaleString()}, 结束: ${new Date(endTime).toLocaleString()}, 会话ID: ${voteSessionId}`);
+            console.log(`投票开始: ${new Date(serverTime).toLocaleString()}, 结束: ${new Date(endTime).toLocaleString()}`);
             
             alert(`投票已开始！投票将持续${durationMinutes}分钟。`);
             
@@ -1431,10 +1389,8 @@
                 return;
             }
             
-            // 使用主系统提供的服务器时间进行计算
-            const now = Date.now();
-            const serverTimeNow = controlData.serverTime ? controlData.serverTime + (now - controlData.lastUpdate) : now;
-            const remaining = Math.max(0, controlData.endTime - serverTimeNow);
+            const serverTime = getServerTime();
+            const remaining = Math.max(0, controlData.endTime - serverTime);
             
             if (remaining <= 0) {
                 // 投票结束
@@ -1446,7 +1402,7 @@
                 // 自动更新控制状态
                 await controlRef.update({
                     isActive: false,
-                    lastUpdate: getServerTime()
+                    lastUpdate: serverTime
                 });
                 return;
             }
@@ -1490,7 +1446,7 @@
 
     // 重置投票系统 - 独立于抽奖系统
     async function resetVoteSystem() {
-        if (confirm('确定要重置投票系统吗？这将清除所有投票数据，包括用户的本地投票记录！')) {
+        if (confirm('确定要重置投票系统吗？这将清除所有投票数据！')) {
             try {
                 // 重置节目票数
                 const snapshot = await programsRef.once('value');
@@ -1507,31 +1463,10 @@
                 // 清空投票记录
                 await votesRef.remove();
                 
-                // 重置员工投票状态
-                if (employeesRef) {
-                    const employeesSnapshot = await employeesRef.once('value');
-                    const employeesData = employeesSnapshot.val();
-                    const employeeResetPromises = Object.keys(employeesData).map(async (employeeId) => {
-                        await employeesRef.child(employeeId).update({
-                            hasVoted: false,
-                            voteDevice: null,
-                            voteTime: null,
-                            lastUpdate: getServerTime()
-                        });
-                    });
-                    await Promise.all(employeeResetPromises);
-                    console.log('员工投票状态已重置');
-                }
-                
-                // 生成新的投票会话ID，标记重置
-                voteSessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-                
-                // 重置控制状态，并设置新的会话ID
+                // 重置控制状态
                 await controlRef.set({
                     isActive: false,
-                    sessionId: voteSessionId,
-                    lastUpdate: getServerTime(),
-                    resetTime: getServerTime() // 添加重置时间戳
+                    lastUpdate: getServerTime()
                 });
                 
                 if (voteTimer) {
@@ -1541,8 +1476,7 @@
                 
                 document.getElementById('vote-time-display').innerHTML = '';
                 
-                // 通知所有用户投票已重置（通过会话ID变化）
-                alert('投票数据已重置！所有用户的投票记录已被清除，可以重新投票。');
+                alert('投票数据已重置！');
                 
                 // 重新渲染
                 const newSnapshot = await programsRef.once('value');
@@ -1588,7 +1522,6 @@
             programsRef = voteDb.ref('programs');
             controlRef = voteDb.ref('vote_control');
             voteSettingsRef = voteDb.ref('vote_settings');
-            employeesRef = voteDb.ref('employees'); // 新增：员工名单引用
             
             console.log('Firebase投票系统初始化成功');
             
@@ -1604,9 +1537,6 @@
             
             // 获取服务器时间偏移量
             await getServerTimeOffset();
-            
-            // 同步员工名单到Firebase
-            await syncEmployeesToFirebase();
             
             await initFirebaseVoteData();
             listenToVotes();
@@ -1884,19 +1814,7 @@
         // 获取当前页面URL
         const currentUrl = window.location.href;
         const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
-        
-        // 生成唯一会话ID
-        const sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-        
-        // 生成加密参数
-        const params = new URLSearchParams({
-            session: sessionId,
-            timestamp: Date.now(),
-            source: 'official'
-        });
-        
-        // 构建投票链接
-        const voteUrl = `${baseUrl}vote.html?${params.toString()}#${sessionId}`;
+        const voteUrl = baseUrl + 'vote.html';
         
         // 显示URL
         voteUrlElement.textContent = voteUrl;
