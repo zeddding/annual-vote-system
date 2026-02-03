@@ -738,6 +738,7 @@
         let programsData = {};
         let programsListener = null;
         let controlListener = null;
+        let lastVoteCheck = 0;
 
         // 更新加载状态
         function updateLoadingStatus(message, detail = '') {
@@ -771,40 +772,18 @@
             return 'vote_device_' + hash;
         }
 
-        // 检查是否已投票
+        // 检查是否已投票 - 修复：只要localStorage有记录就认为已投票
         function checkHasVoted() {
             const voteKey = `annual_vote_${deviceId}`;
             const voteData = localStorage.getItem(voteKey);
-            
-            if (voteData) {
-                const parsedData = JSON.parse(voteData);
-                // 检查投票是否在当前会话中（防止跨会话重复投票）
-                const sessionKey = `vote_session_${deviceId}`;
-                const currentSession = sessionStorage.getItem(sessionKey);
-                
-                if (currentSession) {
-                    return true;
-                }
-                
-                // 如果投票数据存在，但不在当前会话中，清除旧数据（可选）
-                // localStorage.removeItem(voteKey);
-                // return false;
-            }
-            
-            return false;
+            return !!voteData; // 只要有记录就认为已投票
         }
 
-        // 标记已投票
+        // 标记已投票 - 修复：只使用localStorage
         function markAsVoted(voteData) {
             const voteKey = `annual_vote_${deviceId}`;
-            const sessionKey = `vote_session_${deviceId}`;
-            
             // 保存投票数据到localStorage
             localStorage.setItem(voteKey, JSON.stringify(voteData));
-            
-            // 标记当前会话已投票
-            sessionStorage.setItem(sessionKey, 'true');
-            
             hasVoted = true;
         }
 
@@ -1050,19 +1029,32 @@
             });
         }
 
-        // 更新时间显示
+        // 更新时间显示 - 修复卡在57秒问题
         function updateTimeDisplay() {
             const timeElement = document.getElementById('time-remaining');
             
             if (!voteEndTime || !isVotingActive) {
                 timeElement.textContent = '--:--';
+                // 清除定时器
+                if (voteTimer) {
+                    clearInterval(voteTimer);
+                    voteTimer = null;
+                }
                 return;
             }
             
-            const remaining = Math.max(0, voteEndTime - Date.now());
+            const now = Date.now();
+            const remaining = Math.max(0, voteEndTime - now);
             
             if (remaining <= 0) {
                 timeElement.textContent = '00:00';
+                isVotingActive = false;
+                updateStatusUI();
+                // 清除定时器
+                if (voteTimer) {
+                    clearInterval(voteTimer);
+                    voteTimer = null;
+                }
                 return;
             }
             
