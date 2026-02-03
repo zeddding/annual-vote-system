@@ -21,13 +21,15 @@
   if (!firebase.apps.length) {
       firebase.initializeApp(firebaseConfig);
   }
-  // ✅ 关键修复2：确保数据库引用在函数外部可访问
-  const db = firebase.database();
+  // ✅ 关键修复2：移除这里的 const db 声明，放到后面统一管理
 </script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D年会抽奖系统 - 本地极速版</title>
+    
+    <!-- 添加favicon避免404错误 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
     
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
@@ -536,8 +538,9 @@
     let objectUrls = [];
     let effectsInterval = null, coinInterval = null, fireInterval = null;    
 
-    // Firebase相关变量
-    let db = null;
+    // Firebase相关变量 - ✅ 修复：只在主脚本中声明一次
+    let db = firebase.database(); // 使用前面初始化的Firebase
+    let voteDb = null; // 投票系统专用
     let votesRef = null;
     let programsRef = null;
     let controlRef = null;
@@ -1207,14 +1210,14 @@
                 console.error('Firebase SDK 未加载');
                 throw new Error('Firebase SDK 未加载');
             }
-            // 初始化数据库引用
-            db = firebase.database();
-            votesRef = db.ref('votes');
-            programsRef = db.ref('programs');
-            controlRef = db.ref('vote_control');
-            voteSettingsRef = db.ref('vote_settings');
+            // 初始化数据库引用 - ✅ 修复：使用独立的投票数据库引用
+            voteDb = firebase.database();
+            votesRef = voteDb.ref('votes');
+            programsRef = voteDb.ref('programs');
+            controlRef = voteDb.ref('vote_control');
+            voteSettingsRef = voteDb.ref('vote_settings');
             
-            console.log('Firebase初始化成功');
+            console.log('Firebase投票系统初始化成功');
             
             await initFirebaseVoteData();
             listenToVotes();
@@ -1224,9 +1227,9 @@
             document.getElementById('vote-stop-btn').addEventListener('click', stopFirebaseVoting);
             document.getElementById('vote-reset-btn').addEventListener('click', resetFirebaseVoting);
             
-            console.log('Firebase投票系统初始化成功');
+            console.log('Firebase投票系统功能初始化成功');
         } catch (error) {
-            console.error('Firebase初始化失败:', error);
+            console.error('Firebase投票系统初始化失败:', error);
             alert('云端投票系统初始化失败，请检查网络连接');
         }
     }
@@ -1494,5 +1497,4 @@
         });
     }
 </script>
-</body>
 </html>
