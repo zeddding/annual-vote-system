@@ -1310,28 +1310,32 @@
             
             // 使用服务器时间而不是本地时间
             const serverTime = Date.now();
+            const endTime = serverTime + (durationMinutes * 60000);
             
             await controlRef.set({
                 isActive: true,
                 startTime: serverTime,
-                endTime: serverTime + (durationMinutes * 60000),
-                lastUpdate: serverTime
+                endTime: endTime,
+                lastUpdate: serverTime,
+                // 添加唯一标识，防止重复触发
+                sessionId: Date.now().toString(36) + Math.random().toString(36).substr(2)
             });
+            
+            console.log(`投票开始: ${new Date(serverTime).toLocaleString()}, 结束: ${new Date(endTime).toLocaleString()}`);
             
             alert(`投票已开始！投票将持续${durationMinutes}分钟。`);
             
             // 清除现有计时器
             if (voteTimer) {
                 clearInterval(voteTimer);
+                voteTimer = null;
             }
             
-            // 开始监听实时更新
-            listenToVotes();
+            // 启动实时计时器（使用更短的时间间隔提高精度）
+            voteTimer = setInterval(updateVoteTimeDisplay, 500);
             
-            // 启动精确的计时器
-            voteTimer = setInterval(() => {
-                updateVoteTimeDisplay();
-            }, 1000); // 改为1秒更新一次
+            // 立即更新一次
+            setTimeout(updateVoteTimeDisplay, 100);
             
         } catch (error) {
             console.error('开始投票失败:', error);
