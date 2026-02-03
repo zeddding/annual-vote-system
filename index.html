@@ -1064,8 +1064,13 @@
         const data = (await idbKeyval.get(DB_KEY)) || {};
         data.history = {}; 
         await idbKeyval.set(DB_KEY, data);
-        // 重新加载抽奖数据，但不影响投票
-        location.reload();
+        
+        // 只重置抽奖数据，不重新加载页面
+        prizeHistory = {};
+        checkPrizeStatus();
+        renderTagCloud();
+        TagCanvas.Reload('myCanvas');
+        alert('抽奖数据已重置！');
     }
     
     function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
@@ -1326,7 +1331,7 @@
             // 启动精确的计时器
             voteTimer = setInterval(() => {
                 updateVoteTimeDisplay();
-            }, 100);
+            }, 1000); // 改为1秒更新一次
             
         } catch (error) {
             console.error('开始投票失败:', error);
@@ -1364,10 +1369,9 @@
             
             const minutes = Math.floor(remaining / 60000);
             const seconds = Math.floor((remaining % 60000) / 1000);
-            const milliseconds = Math.floor((remaining % 1000) / 10);
             
             document.getElementById('vote-time-display').innerHTML = 
-                `<span style="color: var(--neon-blue); font-weight: bold;">剩余时间: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}</span>`;
+                `<span style="color: var(--neon-blue); font-weight: bold;">剩余时间: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}</span>`;
                 
         } catch (error) {
             console.error('更新时间显示失败:', error);
@@ -1449,9 +1453,6 @@
         const title = document.querySelector('#vote-modal h2');
         if (title) {
             if (controlData.isActive) {
-                const remaining = Math.max(0, Math.floor((controlData.endTime - Date.now()) / 1000));
-                const minutes = Math.floor(remaining / 60);
-                const seconds = remaining % 60;
                 title.innerHTML = `📊 云端投票实时排行榜`;
                 
                 // 更新独立的时间显示
