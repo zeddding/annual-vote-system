@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D年会抽奖系统 - 本地极速版</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
+    
+    <!-- QRCode库用于生成二维码 -->
+    <script src="./qrcode.min.js"></script>
+    <script src="./tagcanvas.min.js"></script>
+    <script src="./xlsx.full.min.js"></script>
+    <script src="./umd.js"></script>
+    <script src="./confetti.min.js"></script>
+
+    <style>
+        /* === 核心变量 === */
+        :root {
+            --neon-purple: #b900ff;
+            --neon-blue: #00eaff;
+            --neon-pink: #ff0055;
+            --neon-gold: #ffd700;
+            --bg-dark: #0b0d17;
+            --panel-bg: rgba(5, 5, 10, 0.95);
+        }
+
+        /* === 基础样式 === */
+        body, html { 
+            margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; 
+            background: var(--bg-dark); 
+            font-family: 'Microsoft YaHei', sans-serif; color: #fff; 
+        }
+        
+        #app { 
+            position: relative; width: 100%; height: 100%; 
+            background: linear-gradient(to bottom, #020024 0%, #090979 35%, #00d4ff 100%);
+            background-size: cover; background-position: center bottom; 
+        }
+        #app.bg-loaded {
+            background-image: url('https://img.freepik.com/free-vector/synthwave-sunset-grid-background_1017-39518.jpg?w=2000');
+        }
+
+        /* === 加载遮罩 === */
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 99999;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            transition: opacity 0.3s;
+        }
+        .loader-bar {
+            width: 200px; height: 4px; background: #333; margin-top: 20px; border-radius: 2px; overflow: hidden;
+        }
+        .loader-progress {
+            width: 0%; height: 100%; background: var(--neon-blue); box-shadow: 0 0 10px var(--neon-blue);
+            transition: width 0.2s;
+        }
+
+        /* === 界面布局 === */
+        #canvas-container { 
+            width: 100%; height: 92%; display: flex; justify-content: center; align-items: center; 
+            z-index: 10; position: relative; 
+            filter: drop-shadow(0 0 15px rgba(0, 234, 255, 0.3));
+        }
+        .top-bar { position: absolute; top: 30px; right: 30px; z-index: 50; display: flex; gap: 15px; }
+        
+        .icon-btn {
+            width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 1px solid var(--neon-blue);
+            text-align: center; line-height: 50px; cursor: pointer; font-size: 22px;
+            color: var(--neon-blue); transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 10px rgba(0, 234, 255, 0.1); backdrop-filter: blur(5px);
+        }
+        .icon-btn:hover { background: var(--neon-blue); color: #000; transform: scale(1.1); box-shadow: 0 0 20px var(--neon-blue); }
+        .icon-btn.danger { border-color: var(--neon-pink); color: var(--neon-pink); }
+        .icon-btn.danger:hover { background: var(--neon-pink); color: #fff; box-shadow: 0 0 20px var(--neon-pink); }
+
+        .control-bar { 
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 8%;
+            background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px);
+            display: flex; justify-content: center; align-items: center; z-index: 20;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 -10px 50px rgba(0,0,0,0.8);
+        }
+
+        select { 
+            padding: 12px 25px; font-size: 20px; background: rgba(0,0,0,0.5); color: var(--neon-blue);
+            border: 2px solid var(--neon-blue); border-radius: 4px; outline: none; cursor: pointer; margin-right: 40px;
+            font-family: 'Orbitron', sans-serif; letter-spacing: 1px;
+        }
+
+        .btn-main {
+            padding: 12px 60px; font-size: 28px; font-weight: 800; border: none; cursor: pointer;
+            text-transform: uppercase; letter-spacing: 4px; min-width: 260px;
+            font-family: 'Rajdhani', sans-serif; border-radius: 2px; transition: 0.1s; position: relative;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+        .btn-start { 
+            background: linear-gradient(90deg, #ff9f43, #ff6b6b); color: #fff; 
+            box-shadow: 0 0 30px rgba(255, 107, 107, 0.4);
+            text-shadow: 0 2px 0 rgba(0,0,0,0.3);
+        }
+        .btn-start:active:not(:disabled) { transform: scale(0.95); box-shadow: 0 0 10px rgba(255, 107, 107, 0.4); }
+        .btn-stop { 
+            background: linear-gradient(90deg, #ff0055, #ff0000); color: #fff; 
+            box-shadow: 0 0 50px rgba(255, 0, 0, 0.6); animation: pulse-red 0.5s infinite;
+        }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 20px #f00; } 100% { box-shadow: 0 0 50px #f00; } }
+        .btn-main:disabled { background: #333; color: #666; box-shadow: none; cursor: not-allowed; }
+
+        /* === 弹窗 === */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 3000; backdrop-filter: blur(3px); 
+            justify-content: center; align-items: center; flex-direction: column;
+            perspective: 1000px;
+        }
+        .modal-panel {
+            background: rgba(15, 15, 30, 0.85); width: 700px; max-width: 95%; max-height: 90vh;
+            padding: 0; border: 1px solid rgba(0, 234, 255, 0.3);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 0 100px rgba(0,0,0,0.8);
+            color: #eee; display: flex; flex-direction: column; position: relative;
+            backdrop-filter: blur(15px);
+            transform: rotateX(0deg); animation: panel-open 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes panel-open { from { opacity: 0; transform: rotateX(-20deg) translateY(50px); } to { opacity: 1; transform: rotateX(0) translateY(0); } }
+        
+        .modal-header { padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); }
+        .modal-header h2 { margin: 0; font-family: 'Orbitron', sans-serif; color: var(--neon-gold); text-transform: uppercase; letter-spacing: 2px; }
+        .close-btn { position: absolute; top: 15px; right: 20px; font-size: 32px; cursor: pointer; color: var(--neon-blue); z-index: 10; opacity: 0.7; }
+        .close-btn:hover { opacity: 1; transform: rotate(90deg); transition: 0.3s; }
+        .modal-body { padding: 30px; overflow-y: auto; flex: 1; }
+
+        /* === 🏆 中奖展示 === */
+        #winner-modal .modal-panel { width: 90%; max-width: 1400px; text-align: center; border: 2px solid var(--neon-gold); }
+        .winner-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 40px; }
+        
+        .winner-item { 
+            display: flex; flex-direction: column; align-items: center; width: 180px; padding: 20px 10px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0) 100%);
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: relative; overflow: hidden;
+        }
+        .winner-item::after {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.1), transparent);
+            transform: rotate(45deg); animation: shine 3s infinite;
+        }
+        @keyframes shine { 0% { left: -100%; } 20% { left: 100%; } 100% { left: 100%; } }
+
+        .winner-item img { 
+            width: 130px; height: 130px; border-radius: 50%; border: 4px solid var(--neon-gold); 
+            object-fit: cover; box-shadow: 0 0 20px rgba(255, 215, 0, 0.4); 
+            animation: shake-gentle 3s infinite ease-in-out;
+        }
+        .winner-item span { 
+            margin-top: 15px; font-size: 24px; font-weight: bold; color: var(--neon-blue); 
+            text-shadow: 0 0 10px var(--neon-blue); font-family: 'Rajdhani', sans-serif; 
+            animation: shake-gentle 3.2s infinite ease-in-out reverse; z-index: 1;
+        }
+
+        /* 🔥 特等奖 */
+        .grand-prize-mode .modal-header h2 { 
+            font-size: 70px; color: #ffd700; text-shadow: 0 0 50px #ffd700, 0 0 100px #ff0000; 
+            animation: pulse-gold 0.2s infinite alternate;
+        }
+        .grand-prize-mode .winner-item {
+            width: 320px; padding: 40px 20px;
+            background: rgba(255, 215, 0, 0.05); border: 2px solid #ffd700;
+            box-shadow: 0 0 80px rgba(255, 215, 0, 0.3);
+        }
+        .grand-prize-mode .winner-item img {
+            width: 250px; height: 250px; border: 8px solid #fff; box-shadow: 0 0 100px #ff4500;
+            animation: glitch-anim 0.3s infinite linear alternate-reverse;
+        }
+        .grand-prize-mode .winner-item span {
+            font-size: 50px; color: #fff; text-shadow: 2px 2px #ff00de, -2px -2px #00eaff;
+            animation: glitch-text 0.3s infinite linear alternate-reverse;
+        }
+
+        /* 冲击波 */
+        @keyframes shockwave { 0% { transform: scale(0.8); opacity: 0; border: 20px solid #fff; } 50% { opacity: 1; } 100% { transform: scale(2); opacity: 0; border: 0px solid #fff; } }
+        .shockwave-active { animation: shockwave 0.5s ease-out forwards; position: absolute; width: 100vw; height: 100vh; pointer-events: none; z-index: 2000; top:0; left:0; border-radius: 50%; }
+
+        @keyframes shake-gentle { 0%,100%{transform:translate(0,0)} 50%{transform:translate(0, -5px)} }
+        @keyframes pulse-gold { from{transform:scale(1); opacity:0.8} to{transform:scale(1.05); opacity:1} }
+        @keyframes glitch-anim { 0% { transform: translate(0) } 20% { transform: translate(-2px, 2px) } 40% { transform: translate(-2px, -2px) } 60% { transform: translate(2px, 2px) } 80% { transform: translate(2px, -2px) } 100% { transform: translate(0) } }
+        @keyframes glitch-text { 0% { clip-path: inset(20% 0 80% 0); transform: translate(-2px,0) } 20% { clip-path: inset(60% 0 10% 0); transform: translate(2px,0) } 40% { clip-path: inset(40% 0 50% 0); transform: translate(-2px,0) } 60% { clip-path: inset(80% 0 5% 0); transform: translate(2px,0) } 80% { clip-path: inset(10% 0 60% 0); transform: translate(-2px,0) } 100% { clip-path: inset(30% 0 30% 0); transform: translate(2px,0) } }
+
+        /* === 特效层 === */
+        #coin-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9000; }
+        .coin {
+            position: fixed; top: -60px; width: 50px; height: 50px;
+            background: radial-gradient(circle at 30% 30%, #ffd700, #b8860b);
+            border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 25px #ffd700;
+            will-change: transform; animation: fall linear forwards;
+        }
+        .coin::after { content: '$'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #b8860b; font-weight: 900; font-family: 'Rajdhani'; font-size: 28px; }
+        @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+
+        #fire-container {
+            position: fixed; bottom: -20px; left: 0; width: 100%; height: 100%; 
+            pointer-events: none; z-index: 8000; display: none; justify-content: center; 
+            filter: contrast(1.5) blur(1px);
+        }
+        .fire-particle {
+            position: absolute; bottom: -100px; width: 60px; height: 60px; 
+            background: radial-gradient(circle, #ffeb3b, #ff5722, transparent 70%);
+            border-radius: 50%; mix-blend-mode: screen; opacity: 0;
+            will-change: transform, opacity; animation: rise 1s ease-out forwards;
+        }
+        .grand-fire { background: radial-gradient(circle, #fff, #00eaff, transparent 70%); width: 100px; height: 100px; }
+        @keyframes rise { 0% { transform: translateY(0) scale(1); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-90vh) scale(0); opacity: 0; } }
+
+        /* === 列表与表单 === */
+        .history-list { list-style: none; padding: 0; margin: 0; }
+        .history-item { 
+            background: rgba(255, 255, 255, 0.05); padding: 15px; margin-bottom: 12px; 
+            border: 1px solid rgba(0, 234, 255, 0.3); display: flex; justify-content: space-between; align-items: center; 
+            border-left: 4px solid var(--neon-gold); cursor: pointer; transition: 0.2s;
+        }
+        .history-item:hover { background: rgba(0, 234, 255, 0.1); border-color: var(--neon-blue); }
+        .history-avatars img { width: 35px; height: 35px; border-radius: 50%; border: 1px solid #fff; margin-left: -10px; position: relative; z-index: 1; }
+        .history-left { display: flex; flex-direction: column; }
+        .history-name { font-size: 20px; color: var(--neon-gold); font-family: 'Orbitron'; margin-bottom: 5px; }
+        .history-count { font-size: 12px; color: #aaa; }
+
+        .roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 20px; }
+        .roster-item { display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .roster-item img { width: 70px; height: 70px; border-radius: 50%; border: 2px solid var(--neon-purple); object-fit: cover; background: #000; }
+        .roster-item span { margin-top: 5px; color: #ccc; font-size: 14px; }
+        .roster-item.is-winner img { filter: grayscale(1); opacity: 0.3; border-color: #333; }
+        .roster-item.is-winner span { text-decoration: line-through; color: #555; }
+
+        .form-group label { color: var(--neon-blue); font-family: 'Orbitron', sans-serif; display:block; margin-bottom:5px;}
+        input[type="file"] { background: rgba(0,0,0,0.5); border: 1px solid var(--neon-blue); color: #fff; padding: 10px; width: 100%; box-sizing: border-box; }
+        
+        /* ==================== 投票相关样式 ==================== */
+        .vote-item {
+            transition: all 0.3s ease;
+        }
+        
+        .vote-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+        
+        @keyframes pulse-gold {
+            0% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+            100% { box-shadow: 0 0 40px rgba(255, 215, 0, 0.8); }
+        }
+        
+        /* 投票进度条动画 */
+        @keyframes progress-pulse {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { opacity: 0.8; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div style="font-family:'Orbitron'; color:var(--neon-blue); font-size:24px; margin-bottom:10px;">SYSTEM LOADING</div>
+    <div class="loader-bar"><div class="loader-progress" id="loader-progress"></div></div>
+</div>
+
+<div id="coin-container"></div>
+<div id="fire-container"></div>
+<div id="shockwave-layer"></div>
+
+<div id="app">
+    <audio id="bgm" loop></audio>
+    <audio id="sound-start" loop src="https://assets.mixkit.co/sfx/preview/mixkit-futuristic-technology-turn-on-2141.mp3"></audio>
+    <audio id="sound-roll" loop src="https://assets.mixkit.co/sfx/preview/mixkit-drum-roll-566.mp3"></audio>
+    <audio id="sound-win" src="https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3"></audio>
+
+    <div class="top-bar">
+        <div class="icon-btn" onclick="openRoster()" title="参选名单">👥</div>
+        <div class="icon-btn" onclick="openHistory()" title="中奖记录">📋</div>
+        <div class="icon-btn" onclick="openVotePanel()" title="投票结果">🗳️</div>
+        <div class="icon-btn" onclick="generateVoteQRCode()" title="投票二维码">📱</div>
+        <div class="icon-btn" onclick="openSettings()" title="设置">⚙️</div>
+        <div class="icon-btn danger" onclick="resetSystem()" title="重置">🔄</div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="myCanvas" width="800" height="800"></canvas>
+    </div>
+
+    <div id="tags" style="display: none;"><ul id="member-list"></ul></div>
+
+    <div class="control-bar">
+        <select id="prize-select" onchange="checkPrizeStatus()"></select>
+        <button id="toggle-btn" class="btn-main btn-start" onclick="toggleLottery()">START ENGINE ▶</button>
+    </div>
+
+    <div id="winner-modal" class="modal-overlay" onclick="/* 沉浸式不关闭 */">
+        <div class="modal-panel" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="close-btn" onclick="closeWinner()">×</div>
+                <h2 id="win-title">🎉 恭喜中奖 🎉</h2>
+            </div>
+            <div class="modal-body">
+                <div id="win-grid" class="winner-grid"></div>
+                <div style="margin-top:50px; font-size:16px; color: #aaa; cursor:pointer;" onclick="closeWinner()">[ 点击关闭特效 ]</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="history-modal" class="modal-overlay">
+        <div class="modal-panel">
+            <div class="modal-header">
+                <div class="close-btn" onclick="document.getElementById('history-modal').style.display='none'">×</div>
+                <h2>📋 中奖记录</h2>
+            </div>
+            <div class="modal-body">
+                <ul id="history-list-dom" class="history-list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="roster-modal" class="modal-overlay">
+        <div class="modal-panel">
+            <div class="modal-header">
+                <div class="close-btn" onclick="document.getElementById('roster-modal').style.display='none'">×</div>
+                <h2>👥 参选名单 [<span id="roster-count">0</span>]</h2>
+            </div>
+            <div class="modal-body">
+                <div id="roster-grid" class="roster-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal-overlay">
+        <div class="modal-panel" style="width: 600px;">
+            <div class="modal-header">
+                <div class="close-btn" onclick="document.getElementById('settings-modal').style.display='none'">×</div>
+                <h2>⚙️ 设置</h2>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label>1. 名单 Excel</label><input type="file" id="set-excel" accept=".xlsx, .xls"></div>
+                <div class="form-group"><label>2. 头像文件夹</label><input type="file" id="set-folder" webkitdirectory directory multiple></div>
+                <div class="form-group">
+                    <label>3. 素材替换</label>
+                    <div style="margin:5px 0"><small>背景图:</small> <input type="file" id="set-bg" accept="image/*"></div>
+                    <div style="margin:5px 0"><small>BGM:</small> <input type="file" id="set-music" accept="audio/*"></div>
+                    <div style="margin:5px 0"><small>开始音效:</small> <input type="file" id="set-start-sound" accept="audio/*"></div>
+                    <div><small>中奖音效:</small> <input type="file" id="set-win-sound" accept="audio/*"></div>
+                </div>
+                <button class="btn-main btn-start" style="width:100%; margin-top:20px;" onclick="saveSettings()">保存并重启</button>
+                <div id="save-status" style="margin-top:10px; color:var(--neon-gold); text-align:center;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 投票结果显示面板 -->
+    <div id="vote-modal" class="modal-overlay">
+        <div class="modal-panel" style="width: 90%; max-width: 1400px;">
+            <div class="modal-header">
+                <div class="close-btn" onclick="document.getElementById('vote-modal').style.display='none'">×</div>
+                <h2>📊 节目投票实时排行榜</h2>
+                <div style="display: flex; gap: 20px; margin-top: 10px; flex-wrap: wrap;">
+                    <button class="btn-main btn-start" onclick="startVoting()" style="padding: 8px 20px; font-size: 16px;">开始投票 (2分钟)</button>
+                    <button class="btn-main btn-stop" onclick="stopVoting()" style="padding: 8px 20px; font-size: 16px;">结束投票</button>
+                    <button class="btn-main" onclick="resetVoting()" style="padding: 8px 20px; font-size: 16px; background: #666;">重置投票</button>
+                    <button class="btn-main" onclick="generateVoteQRCode()" style="padding: 8px 20px; font-size: 16px; background: var(--neon-purple);">生成投票二维码</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div id="vote-results" style="display: flex; flex-direction: column; gap: 15px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 投票二维码模态窗口 -->
+    <div id="qrcode-modal" class="modal-overlay">
+        <div class="modal-panel" style="width: 500px; text-align: center;">
+            <div class="modal-header">
+                <div class="close-btn" onclick="document.getElementById('qrcode-modal').style.display='none'">×</div>
+                <h2>📱 投票二维码</h2>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px;">请扫描下方二维码进入投票页面</p>
+                <div id="qrcode" style="width: 300px; height: 300px; margin: 0 auto; background: #fff; padding: 20px; display: flex; align-items: center; justify-content: center;">
+                    <span style="color: #000; font-size: 14px;">加载二维码中...</span>
+                </div>
+                <p style="margin-top: 20px; color: #aaa; word-break: break-all;">
+                    或直接访问:<br>
+                    <span id="vote-url" style="color: var(--neon-blue); font-size: 14px;"></span>
+                </p>
+                <button class="btn-main btn-start" onclick="copyVoteURL()" style="margin-top: 20px; padding: 10px 20px;">复制投票链接</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 脚本开始
+    const DB_KEY = 'lottery_db_v15_speedgod_fix';
+    const PRIZE_CONFIG = {
+        3: { name: "三等奖", count: 20 },
+        2: { name: "二等奖", count: 12 },
+        1: { name: "一等奖", count: 5 },
+        0: { name: "特等奖", count: 2 } 
+    };
+
+    let allMembers = [];      
+    let prizeHistory = {};    
+    let isRolling = false;
+    let objectUrls = [];
+    let effectsInterval = null, coinInterval = null, fireInterval = null;    
+
+    // === 极速头像生成引擎 ===
+    function generateAvatar(name) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 100; canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+        const colors = ['#b900ff', '#00eaff', '#ff0055', '#2d3436', '#0984e3'];
+        const bgColor = colors[name.charCodeAt(0) % colors.length];
+        
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, 100, 100);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 50px Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(name.charAt(0), 50, 50);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(50,50,45,0,Math.PI*2); ctx.stroke();
+        return canvas.toDataURL();
+    }
+
+    // === 初始化逻辑优化 ===
+    window.onload = async function() {
+        const loaderBar = document.getElementById('loader-progress');
+        loaderBar.style.width = '30%'; 
+        
+        setTimeout(async () => {
+            // ✅ 核心修复：更温和的检查，只检查核心库，不检查可选的 confetti
+            if(typeof idbKeyval === 'undefined' || typeof TagCanvas === 'undefined') {
+                alert("请下载 JS 库到本地 (tagcanvas.min.js, xlsx.full.min.js, umd.js)！"); return;
+            }
+            // 检查礼花库是否加载（可选）
+            if(typeof window.confetti === 'undefined') {
+                console.warn("⚠️ 礼花库加载失败，特效将受限。请检查网络或下载 confetti.browser.min.js");
+            }
+
+            loaderBar.style.width = '70%';
+            await loadData();
+            initUI();
+            
+            const img = new Image();
+            img.src = 'https://img.freepik.com/free-vector/synthwave-sunset-grid-background_1017-39518.jpg?w=2000';
+            img.onload = () => { document.getElementById('app').classList.add('bg-loaded'); };
+
+            window.addEventListener('resize', reloadCanvas);
+            
+            loaderBar.style.width = '100%';
+            setTimeout(() => { document.getElementById('loader').style.opacity = 0; }, 300);
+            setTimeout(() => { document.getElementById('loader').style.display = 'none'; }, 800);
+            
+            // 初始化投票系统
+            initVoteSystem();
+        }, 300);
+    };
+
+    function initUI() {
+        const select = document.getElementById('prize-select');
+        select.innerHTML = '';
+        Object.keys(PRIZE_CONFIG).sort((a,b) => b-a).forEach(k => {
+            const opt = document.createElement('option');
+            opt.value = k;
+            opt.innerText = `${PRIZE_CONFIG[k].name}`;
+            select.appendChild(opt);
+        });
+        checkPrizeStatus(); 
+    }
+
+    function reloadCanvas() {
+        const c = document.getElementById('myCanvas');
+        const p = document.getElementById('canvas-container');
+        c.width = p.offsetWidth; c.height = p.offsetHeight;
+        if(!isRolling) try{ TagCanvas.Reload('myCanvas'); }catch(e){}
+    }
+
+    async function loadData() {
+        const data = await idbKeyval.get(DB_KEY);
+        if (data) {
+            const loadBlob = (id, blob) => { if(blob) document.getElementById(id).src = URL.createObjectURL(blob); };
+            loadBlob('bgm', data.musicBlob);
+            loadBlob('sound-win', data.winSoundBlob);
+            loadBlob('sound-start', data.startSoundBlob);
+            if (data.bgBlob) document.getElementById('app').style.backgroundImage = `url(${URL.createObjectURL(data.bgBlob)})`;
+            
+            if (data.history) prizeHistory = data.history; 
+            
+            if (data.members) {
+                allMembers = data.members.map(m => {
+                    let url;
+                    if (m.imgFileName && data.imgBlobs && data.imgBlobs[m.imgFileName]) {
+                        url = URL.createObjectURL(data.imgBlobs[m.imgFileName]);
+                        objectUrls.push(url);
+                    } else {
+                        url = generateAvatar(m.name);
+                    }
+                    return { name: m.name, img: url };
+                });
+            } else { useDemoData(); }
+        } else { useDemoData(); }
+        renderTagCloud();
+        setTimeout(() => initTagCanvas(), 100);
+    }
+
+    function useDemoData() {
+        allMembers = Array.from({length: 80}, (_, i) => {
+            const name = `员工${i+1}`;
+            return { name: name, img: generateAvatar(name) };
+        });
+    }
+
+    function getLeftPool() {
+        const allWinners = Object.values(prizeHistory).flat().map(w => w.name);
+        return allMembers.filter(m => !allWinners.includes(m.name));
+    }
+
+    function renderTagCloud() {
+        const pool = getLeftPool();
+        const ul = document.getElementById('member-list');
+        ul.innerHTML = '';
+        const list = pool.length > 0 ? pool : [{name:"抽奖结束", img: generateAvatar("完")}];
+        list.forEach(m => {
+            const li = document.createElement('li');
+            li.innerHTML = `<a href="#" onclick="return false;" style="font-size:18px; color:#00eaff;"><img src="${m.img}" width="90" height="90" style="border-radius:50%; border:3px solid #b900ff; box-shadow:0 0 15px #b900ff;">${m.name}</a>`;
+            ul.appendChild(li);
+        });
+    }
+
+    function initTagCanvas() {
+        try {
+            const p = document.getElementById('canvas-container');
+            document.getElementById('myCanvas').width = p.offsetWidth;
+            document.getElementById('myCanvas').height = p.offsetHeight;
+            TagCanvas.Start('myCanvas', 'tags', {
+                textColour: null, outlineColour: 'transparent', reverse: true, depth: 0.8,
+                maxSpeed: 0.05, initial: [0.1, -0.1], imageMode: 'both', imagePosition: 'top', 
+                lock: 'xy', clickToFront: 600, 
+                shadow: '#00eaff', shadowBlur: 10, weight: true, weightMode: 'both',
+                freezeActive: true
+            });
+        } catch(e){}
+    }
+
+    function toggleLottery() {
+        const btn = document.getElementById('toggle-btn');
+        const rollSound = document.getElementById('sound-roll');
+        const winSound = document.getElementById('sound-win');
+        const bgm = document.getElementById('bgm');
+        const startSound = document.getElementById('sound-start');
+
+        if(bgm.paused && bgm.src) bgm.play().catch(()=>{});
+
+        if (!isRolling) {
+            const type = document.getElementById('prize-select').value;
+            const config = PRIZE_CONFIG[type];
+            const alreadyDrawn = (prizeHistory[type] || []).length;
+            const pool = getLeftPool();
+
+            if (alreadyDrawn >= config.count) { alert("本轮已结束"); return; }
+            if (pool.length === 0) { alert("奖池已空"); return; }
+
+            startSound.currentTime = 0; startSound.play().catch(()=>{});
+            isRolling = true;
+            btn.innerText = "STOP ENGINE ■";
+            btn.className = "btn-main btn-stop";
+            TagCanvas.SetSpeed('myCanvas', [2.0, 1.5]); 
+            rollSound.currentTime = 0; rollSound.play().catch(()=>{});
+
+        } else {
+            isRolling = false;
+            btn.innerText = "START ENGINE ▶";
+            btn.className = "btn-main btn-start";
+            TagCanvas.SetSpeed('myCanvas', [0.05, -0.05]);
+            
+            startSound.pause(); startSound.currentTime = 0;
+            rollSound.pause(); 
+            winSound.currentTime = 0; winSound.play().catch(()=>{});
+
+            batchDraw();
+        }
+    }
+
+    async function batchDraw() {
+        const type = document.getElementById('prize-select').value;
+        const config = PRIZE_CONFIG[type];
+        const currentHistory = prizeHistory[type] || [];
+        const needed = config.count - currentHistory.length; 
+        
+        let pool = getLeftPool();
+        const countToDraw = Math.min(needed, pool.length);
+        
+        if (countToDraw <= 0) return;
+
+        const winners = [];
+        for (let i = 0; i < countToDraw; i++) {
+            const idx = Math.floor(Math.random() * pool.length);
+            winners.push(pool[idx]);
+            pool.splice(idx, 1);
+        }
+
+        if (!prizeHistory[type]) prizeHistory[type] = [];
+        prizeHistory[type].push(...winners);
+
+        const dbData = (await idbKeyval.get(DB_KEY)) || {};
+        dbData.history = prizeHistory;
+        await idbKeyval.set(DB_KEY, dbData);
+
+        const isGrand = (type == 0); 
+        showWinnersModal(config.name, winners, isGrand);
+        checkPrizeStatus();
+        
+        setTimeout(() => {
+            renderTagCloud();
+            TagCanvas.Reload('myCanvas');
+        }, 1000);
+    }
+
+    function showWinnersModal(title, winners, isGrand) {
+        const modal = document.getElementById('winner-modal');
+        const panel = modal.querySelector('.modal-panel');
+        const grid = document.getElementById('win-grid');
+        const titleEl = document.getElementById('win-title');
+
+        titleEl.innerHTML = title.includes("🎉") ? title : `🎉 ${title} 🎉`;
+        
+        if (isGrand) {
+            panel.parentElement.classList.add('grand-prize-mode'); 
+            const shockwave = document.createElement('div');
+            shockwave.className = 'shockwave-active';
+            document.body.appendChild(shockwave);
+            setTimeout(() => shockwave.remove(), 600);
+        } else {
+            panel.parentElement.classList.remove('grand-prize-mode');
+        }
+
+        grid.innerHTML = '';
+        winners.forEach((w, i) => {
+            const div = document.createElement('div');
+            div.className = 'winner-item'; 
+            div.innerHTML = `<img src="${w.img}" onerror="this.src='${generateAvatar(w.name)}'"><span>${w.name}</span>`;
+            grid.appendChild(div);
+        });
+
+        modal.style.display = 'flex';
+        startAllEffects(isGrand);
+    }
+
+    function closeWinner() { 
+        document.getElementById('winner-modal').style.display = 'none';
+        stopAllEffects(); 
+    }
+
+    function startAllEffects(isGrand) {
+        // ✅ 安全检查：如果没加载礼花库，就不放礼花，防止报错
+        if (typeof confetti !== 'undefined') {
+            const duration = isGrand ? 600 : 1500; 
+            const count = isGrand ? 200 : 80; 
+            
+            effectsInterval = setInterval(() => {
+                confetti({
+                    particleCount: count, spread: 120, origin: { y: 0.6 },
+                    zIndex: 10000,
+                    colors: isGrand ? ['#ffd700', '#ffffff', '#ff0000', '#00eaff'] : ['#00eaff', '#b900ff']
+                });
+            }, duration);
+        }
+
+        const container = document.getElementById('coin-container');
+        const coinDensity = isGrand ? 20 : 60; 
+        coinInterval = setInterval(() => {
+            const coin = document.createElement('div');
+            coin.classList.add('coin');
+            if(isGrand) {
+                 const isLeft = Math.random() > 0.5;
+                 coin.style.left = (isLeft ? Math.random() * 25 : 75 + Math.random() * 25) + 'vw';
+            } else {
+                 coin.style.left = Math.random() * 100 + 'vw';
+            }
+            coin.style.animationDuration = (1 + Math.random() * 2) + 's';
+            container.appendChild(coin);
+            setTimeout(() => coin.remove(), 4000);
+        }, coinDensity);
+
+        const fireContainer = document.getElementById('fire-container');
+        fireContainer.style.display = 'flex';
+        const fireDensity = isGrand ? 30 : 80; 
+        fireInterval = setInterval(() => {
+            const fire = document.createElement('div');
+            fire.classList.add('fire-particle');
+            if(isGrand) fire.classList.add('grand-fire');
+            fire.style.left = (Math.random() * 100) + '%';
+            const scaleX = 0.5 + Math.random();
+            fire.style.transform = `scaleX(${scaleX})`;
+            fireContainer.appendChild(fire);
+            setTimeout(() => fire.remove(), 1200);
+        }, fireDensity);
+    }
+
+    function stopAllEffects() {
+        if(effectsInterval) clearInterval(effectsInterval);
+        if(coinInterval) clearInterval(coinInterval);
+        if(fireInterval) clearInterval(fireInterval);
+        document.getElementById('coin-container').innerHTML = '';
+        document.getElementById('fire-container').innerHTML = '';
+        document.getElementById('fire-container').style.display = 'none';
+        if (typeof confetti !== 'undefined') confetti.reset();
+    }
+
+    function checkPrizeStatus() {
+        const select = document.getElementById('prize-select');
+        const btn = document.getElementById('toggle-btn');
+        const options = select.options;
+        for (let i = 0; i < options.length; i++) {
+            const type = options[i].value;
+            const config = PRIZE_CONFIG[type];
+            const drawn = (prizeHistory[type] || []).length;
+            if (drawn >= config.count) {
+                options[i].innerText = `[已完] ${config.name}`;
+            } else {
+                options[i].innerText = `${config.name} [剩${config.count - drawn}]`;
+            }
+        }
+        const currentType = select.value;
+        const currentDrawn = (prizeHistory[currentType] || []).length;
+        if(currentDrawn >= PRIZE_CONFIG[currentType].count) {
+            btn.innerText = "本轮已完结"; btn.disabled = true;
+        } else {
+            btn.innerText = "START ENGINE ▶"; btn.disabled = false;
+        }
+    }
+
+    function openRoster() {
+        const modal = document.getElementById('roster-modal');
+        const grid = document.getElementById('roster-grid');
+        document.getElementById('roster-count').innerText = allMembers.length;
+        grid.innerHTML = '';
+        const allWinners = Object.values(prizeHistory).flat().map(w => w.name);
+        const displayList = allMembers.length > 500 ? allMembers.slice(0, 500) : allMembers;
+        
+        displayList.forEach(m => {
+            const div = document.createElement('div');
+            div.className = `roster-item ${allWinners.includes(m.name)?'is-winner':''}`;
+            div.innerHTML = `<img src="${m.img}" loading="lazy" onerror="this.src='${generateAvatar(m.name)}'"><span>${m.name}</span>`;
+            grid.appendChild(div);
+        });
+        modal.style.display = 'flex';
+    }
+    
+    function openHistory() {
+        const list = document.getElementById('history-list-dom');
+        list.innerHTML = '';
+        Object.keys(PRIZE_CONFIG).sort((a,b) => a-b).forEach(type => { 
+            const history = prizeHistory[type] || [];
+            const config = PRIZE_CONFIG[type];
+            if (history.length === 0) return;
+            const li = document.createElement('li');
+            li.className = 'history-item';
+            li.onclick = () => showWinnersModal(config.name, history, type==0);
+            let avatars = history.slice(0, 10).map(h => `<img src="${h.img}" onerror="this.src='${generateAvatar(h.name)}'">`).join('');
+            if(history.length > 10) avatars += `<span style="font-size:12px; color:#aaa; align-self:center;">+${history.length-10}</span>`;
+            li.innerHTML = `
+                <div class="history-left">
+                    <span class="history-name" style="font-size:20px; color:var(--neon-gold); font-family:'Orbitron'">${config.name}</span>
+                    <span class="history-count" style="font-size:12px; color:#aaa;">共 ${history.length} 人</span>
+                </div>
+                <div class="history-avatars" style="display:flex; gap:5px;">${avatars}</div>
+            `;
+            list.appendChild(li);
+        });
+        if(list.innerHTML === '') list.innerHTML = '<div style="text-align:center; padding:30px; color:#666;">暂无中奖数据</div>';
+        document.getElementById('history-modal').style.display = 'flex';
+    }
+
+    async function resetSystem() {
+        if(!confirm("⚠️ 确定重置数据吗？")) return;
+        const data = (await idbKeyval.get(DB_KEY)) || {};
+        data.history = {}; 
+        await idbKeyval.set(DB_KEY, data);
+        location.reload();
+    }
+    
+    function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; }
+    
+    async function saveSettings() {
+        const status = document.getElementById('save-status');
+        status.innerText = "Saving...";
+        
+        let dbData = (await idbKeyval.get(DB_KEY)) || {};
+        if (!dbData.imgBlobs) dbData.imgBlobs = {};
+
+        const getFile = (id) => { const el = document.getElementById(id); return el && el.files ? el.files[0] : null; };
+
+        const bgFile = getFile('set-bg'); if (bgFile) dbData.bgBlob = bgFile;
+        const musicFile = getFile('set-music'); if (musicFile) dbData.musicBlob = musicFile;
+        const winSoundFile = getFile('set-win-sound'); if (winSoundFile) dbData.winSoundBlob = winSoundFile;
+        const startSoundFile = getFile('set-start-sound'); if (startSoundFile) dbData.startSoundBlob = startSoundFile;
+
+        const imgInput = document.getElementById('set-folder');
+        if (imgInput && imgInput.files.length > 0) { 
+            for (let f of imgInput.files) dbData.imgBlobs[f.name] = f; 
+        }
+
+        const excelInput = document.getElementById('set-excel');
+        if (excelInput && excelInput.files[0]) {
+            try {
+                const json = await parseExcel(excelInput.files[0]);
+                const newMembers = [];
+                for (let i = 1; i < json.length; i++) { if (json[i][0]) newMembers.push({ name: json[i][0], imgFileName: json[i][1] }); }
+                dbData.members = newMembers; dbData.history = {}; 
+            } catch(e) { alert("Excel Error"); return; }
+        }
+        await idbKeyval.set(DB_KEY, dbData);
+        location.reload();
+    }
+
+    function parseExcel(file) {
+        return new Promise((resolve) => {
+            const r = new FileReader();
+            r.onload = e => {
+                const w = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                resolve(XLSX.utils.sheet_to_json(w.Sheets[w.SheetNames[0]], {header: 1}));
+            };
+            r.readAsArrayBuffer(file);
+        });
+    }
+    
+    // ==================== 投票功能 ====================
+
+    // 投票数据
+    let voteData = {
+        isActive: false,
+        programs: [],
+        lastUpdate: 0
+    };
+
+    // 打开投票面板
+    function openVotePanel() {
+        loadVoteData();
+        renderVoteResults();
+        document.getElementById('vote-modal').style.display = 'flex';
+        
+        // 如果投票正在进行，开始实时更新
+        if (voteData.isActive) {
+            startVoteUpdates();
+        }
+    }
+
+    // 加载投票数据
+    function loadVoteData() {
+        const saved = localStorage.getItem('annual_vote_data');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                voteData = { ...voteData, ...parsed };
+            } catch(e) {
+                console.error("解析投票数据失败:", e);
+                initDefaultVoteData();
+            }
+        } else {
+            initDefaultVoteData();
+        }
+    }
+
+    // 初始化默认投票数据
+    function initDefaultVoteData() {
+        voteData = {
+            isActive: false,
+            programs: [
+                { id: 1, title: "开场舞蹈《未来之光》", votes: 0, color: "#ff0055" },
+                { id: 2, title: "歌曲串烧《岁月如歌》", votes: 0, color: "#b900ff" },
+                { id: 3, title: "小品《办公室的故事》", votes: 0, color: "#00eaff" },
+                { id: 4, title: "魔术表演《梦幻之夜》", votes: 0, color: "#ffd700" },
+                { id: 5, title: "乐器合奏《星空交响》", votes: 0, color: "#00ff9d" },
+                { id: 6, title: "创意走秀《时尚前沿》", votes: 0, color: "#ff9500" },
+                { id: 7, title: "相声《职场那些事儿》", votes: 0, color: "#9d00ff" },
+                { id: 8, title: "合唱《明天会更好》", votes: 0, color: "#00ffea" },
+                { id: 9, title: "舞蹈《古风雅韵》", votes: 0, color: "#ff0062" },
+                { id: 10, title: "舞台剧《我们的故事》", votes: 0, color: "#00b8ff" }
+            ],
+            lastUpdate: 0
+        };
+        saveVoteData();
+    }
+
+    // 渲染投票结果
+    function renderVoteResults() {
+        const container = document.getElementById('vote-results');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        // 按票数排序
+        const sortedPrograms = [...voteData.programs].sort((a, b) => b.votes - a.votes);
+        
+        // 找到最高票数用于计算百分比
+        const maxVotes = Math.max(...sortedPrograms.map(p => p.votes), 1);
+        
+        sortedPrograms.forEach((program, index) => {
+            const percentage = maxVotes > 0 ? (program.votes / maxVotes) * 100 : 0;
+            const isTop = index === 0;
+            
+            const programEl = document.createElement('div');
+            programEl.className = `vote-item`;
+            programEl.style.cssText = `
+                background: rgba(0, 0, 0, 0.7);
+                border: 2px solid ${isTop ? 'var(--neon-gold)' : program.color};
+                border-radius: 10px;
+                padding: 20px;
+                position: relative;
+                overflow: hidden;
+                transition: transform 0.3s;
+            `;
+            
+            if (isTop) {
+                programEl.style.boxShadow = '0 0 30px rgba(255, 215, 0, 0.5)';
+                programEl.style.animation = 'pulse-gold 1s infinite alternate';
+            }
+            
+            programEl.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div style="font-size: 24px; font-weight: bold; color: ${isTop ? 'var(--neon-gold)' : '#fff'}; 
+                             width: 50px; height: 50px; background: rgba(0,0,0,0.7); 
+                             border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                             border: 2px solid ${isTop ? 'var(--neon-gold)' : program.color};">
+                            ${index + 1}
+                        </div>
+                        <h3 style="margin: 0; font-size: 24px; color: ${isTop ? 'var(--neon-gold)' : '#fff'}; font-family: 'Orbitron', sans-serif;">
+                            ${program.title}
+                        </h3>
+                    </div>
+                    <div style="font-size: 32px; font-weight: bold; color: ${isTop ? 'var(--neon-gold)' : program.color}; font-family: 'Rajdhani', sans-serif;">
+                        ${program.votes} <span style="font-size: 18px; color: #aaa;">票</span>
+                    </div>
+                </div>
+                <div style="background: rgba(255,255,255,0.1); height: 30px; border-radius: 15px; overflow: hidden; position: relative;">
+                    <div class="vote-progress" 
+                         style="height: 100%; background: ${isTop ? 
+                           'linear-gradient(90deg, #ffd700, #ff9500)' : 
+                           `linear-gradient(90deg, ${program.color}, ${program.color}80)`}; 
+                         width: ${percentage}%; border-radius: 15px; 
+                         transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); 
+                         display: flex; align-items: center; padding-left: 15px; 
+                         font-weight: bold; color: #000; font-family: 'Orbitron', sans-serif;">
+                        ${percentage.toFixed(1)}%
+                    </div>
+                </div>
+                ${isTop ? `<div style="text-align: center; margin-top: 10px; color: var(--neon-gold); 
+                    font-weight: bold; font-size: 20px; font-family: 'Rajdhani', sans-serif;">
+                    🏆 当前票数最高 🏆
+                </div>` : ''}
+            `;
+            
+            container.appendChild(programEl);
+        });
+        
+        // 更新标题显示投票状态
+        const title = document.querySelector('#vote-modal h2');
+        if (title) {
+            if (voteData.isActive) {
+                title.innerHTML = '📊 节目投票实时排行榜 <span style="color: var(--neon-blue); font-size: 18px;">(投票进行中...)</span>';
+            } else {
+                title.innerHTML = '📊 节目投票排行榜 <span style="color: #aaa; font-size: 18px;">(投票已结束)</span>';
+            }
+        }
+    }
+
+    // 开始投票
+    function startVoting() {
+        voteData.isActive = true;
+        voteData.lastUpdate = Date.now();
+        saveVoteData();
+        
+        // 通知投票页面开始投票
+        localStorage.setItem('vote_control', JSON.stringify({ 
+            action: 'start', 
+            timestamp: Date.now(),
+            duration: 120 // 2分钟
+        }));
+        
+        // 播放音效
+        const audio = document.getElementById('sound-start');
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(e => console.log("音频播放失败:", e));
+        }
+        
+        // 显示提示
+        alert('投票已开始！参会人员可以扫描二维码进行投票，投票时长为2分钟。');
+        
+        // 开始实时更新
+        startVoteUpdates();
+        renderVoteResults();
+        
+        // 2分钟后自动结束投票
+        setTimeout(() => {
+            if (voteData.isActive) {
+                stopVoting();
+            }
+        }, 120000); // 2分钟
+    }
+
+    // 停止投票
+    function stopVoting() {
+        voteData.isActive = false;
+        saveVoteData();
+        
+        // 通知投票页面停止投票
+        localStorage.setItem('vote_control', JSON.stringify({ 
+            action: 'stop', 
+            timestamp: Date.now() 
+        }));
+        
+        // 播放音效
+        const audio = document.getElementById('sound-win');
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(e => console.log("音频播放失败:", e));
+        }
+        
+        // 显示最终结果
+        alert('投票已结束！');
+        renderVoteResults();
+    }
+
+    // 重置投票
+    function resetVoting() {
+        if (confirm('确定要重置所有投票数据吗？这将清除所有票数记录！')) {
+            voteData.programs.forEach(p => p.votes = 0);
+            voteData.isActive = false;
+            saveVoteData();
+            
+            // 通知投票页面重置投票
+            localStorage.setItem('vote_control', JSON.stringify({ 
+                action: 'reset', 
+                timestamp: Date.now() 
+            }));
+            
+            renderVoteResults();
+            alert('投票数据已重置！');
+        }
+    }
+
+    // 保存投票数据
+    function saveVoteData() {
+        localStorage.setItem('annual_vote_data', JSON.stringify(voteData));
+    }
+
+    // 开始实时更新投票结果
+    function startVoteUpdates() {
+        // 监听投票数据更新
+        const handleStorageUpdate = function(e) {
+            if (e.key === 'vote_updated') {
+                loadVoteData();
+                renderVoteResults();
+            }
+        };
+        
+        window.addEventListener('storage', handleStorageUpdate);
+        
+        // 每2秒自动检查一次更新
+        if (window.voteUpdateInterval) clearInterval(window.voteUpdateInterval);
+        window.voteUpdateInterval = setInterval(() => {
+            if (voteData.isActive) {
+                loadVoteData();
+                renderVoteResults();
+            }
+        }, 2000);
+        
+        // 存储事件监听器以便清理
+        window.voteStorageListener = handleStorageUpdate;
+    }
+
+    // 当投票面板关闭时停止更新
+    document.getElementById('vote-modal').addEventListener('click', function(e) {
+        if (e.target.classList.contains('modal-overlay') || e.target.classList.contains('close-btn')) {
+            // 移除事件监听器
+            if (window.voteStorageListener) {
+                window.removeEventListener('storage', window.voteStorageListener);
+            }
+            if (window.voteUpdateInterval) {
+                clearInterval(window.voteUpdateInterval);
+            }
+        }
+    });
+
+    // 生成投票二维码
+    function generateVoteQRCode() {
+        const modal = document.getElementById('qrcode-modal');
+        const qrcodeContainer = document.getElementById('qrcode');
+        const voteUrlElement = document.getElementById('vote-url');
+        
+        // 生成投票页面URL
+        const currentUrl = window.location.href;
+        const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
+        const voteUrl = baseUrl + 'vote.html';
+        
+        // 显示URL
+        voteUrlElement.textContent = voteUrl;
+        
+        // 清空二维码容器
+        qrcodeContainer.innerHTML = '';
+        
+        // 使用QRCode.js生成二维码（如果已加载）
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(qrcodeContainer, {
+                text: voteUrl,
+                width: 256,
+                height: 256,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        } else {
+            // 如果没有QRCode库，显示提示
+            qrcodeContainer.innerHTML = `
+                <div style="color: #000; text-align: center; padding: 20px;">
+                    <div style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">请添加QRCode.js库</div>
+                    <div style="font-size: 12px; margin-bottom: 10px;">在&lt;head&gt;中添加:</div>
+                    <div style="background: #f0f0f0; padding: 5px; border-radius: 3px; font-family: monospace; font-size: 12px;">
+                        &lt;script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"&gt;&lt;/script&gt;
+                    </div>
+                    <div style="margin-top: 15px; font-size: 12px;">或直接访问:</div>
+                    <div style="font-size: 12px; font-weight: bold; margin-top: 5px;">${voteUrl}</div>
+                </div>
+            `;
+        }
+        
+        modal.style.display = 'flex';
+    }
+
+    // 复制投票链接
+    function copyVoteURL() {
+        const voteUrlElement = document.getElementById('vote-url');
+        const url = voteUrlElement.textContent;
+        
+        navigator.clipboard.writeText(url).then(() => {
+            alert('投票链接已复制到剪贴板！');
+        }).catch(err => {
+            // 备用方法
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('投票链接已复制到剪贴板！');
+        });
+    }
+
+    // 初始化投票数据
+    function initVoteSystem() {
+        loadVoteData();
+        
+        // 检查是否有正在进行的投票
+        if (voteData.isActive) {
+            // 检查是否已超过2分钟
+            const now = Date.now();
+            const twoMinutesAgo = now - 120000; // 2分钟前
+            
+            if (voteData.lastUpdate && voteData.lastUpdate < twoMinutesAgo) {
+                // 自动结束已超时的投票
+                voteData.isActive = false;
+                saveVoteData();
+            } else {
+                // 投票仍在进行中，开始更新
+                startVoteUpdates();
+            }
+        }
+    }
+</script>
+</body>
+</html>

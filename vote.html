@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>年会节目投票</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-purple: #b900ff;
+            --neon-blue: #00eaff;
+            --neon-pink: #ff0055;
+            --neon-gold: #ffd700;
+            --bg-dark: #0b0d17;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: var(--bg-dark);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+            background: linear-gradient(to bottom, #020024 0%, #090979 35%, #00d4ff 100%);
+            background-attachment: fixed;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid var(--neon-blue);
+        }
+        
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--neon-gold);
+            text-shadow: 0 0 10px var(--neon-gold);
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #aaa;
+            font-size: 1.1rem;
+        }
+        
+        .timer-container {
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid var(--neon-pink);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 0 20px rgba(255, 0, 85, 0.3);
+        }
+        
+        .timer-title {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--neon-pink);
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+        
+        #timer {
+            font-size: 3rem;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 10px var(--neon-pink);
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        .vote-control {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Orbitron', sans-serif;
+            transition: all 0.3s;
+        }
+        
+        .btn-start {
+            background: linear-gradient(90deg, #00b09b, #96c93d);
+            color: white;
+            box-shadow: 0 0 20px rgba(0, 176, 155, 0.5);
+        }
+        
+        .btn-start:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 176, 155, 0.7);
+        }
+        
+        .btn-start:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-reset {
+            background: linear-gradient(90deg, #ff416c, #ff4b2b);
+            color: white;
+            box-shadow: 0 0 20px rgba(255, 65, 108, 0.5);
+        }
+        
+        .btn-reset:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(255, 65, 108, 0.7);
+        }
+        
+        .programs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .program-card {
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid var(--neon-blue);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .program-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 234, 255, 0.3);
+        }
+        
+        .program-card.voted {
+            border-color: var(--neon-gold);
+            background: rgba(255, 215, 0, 0.1);
+        }
+        
+        .program-number {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--neon-purple);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .program-title {
+            font-size: 1.5rem;
+            color: var(--neon-blue);
+            margin-bottom: 15px;
+            font-family: 'Orbitron', sans-serif;
+            padding-right: 50px;
+        }
+        
+        .program-desc {
+            color: #ccc;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        
+        .vote-btn {
+            background: var(--neon-purple);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            transition: all 0.3s;
+        }
+        
+        .vote-btn:hover:not(:disabled) {
+            background: #d000ff;
+            box-shadow: 0 0 15px var(--neon-purple);
+        }
+        
+        .vote-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .vote-btn.voted {
+            background: var(--neon-gold);
+            color: #000;
+        }
+        
+        .votes-count {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 1.2rem;
+            color: var(--neon-gold);
+            font-weight: bold;
+        }
+        
+        .status-info {
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid var(--neon-blue);
+        }
+        
+        #status-text {
+            font-size: 1.2rem;
+            color: var(--neon-gold);
+        }
+        
+        #votes-remaining {
+            color: var(--neon-pink);
+            font-weight: bold;
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 30px;
+            border: 1px solid var(--neon-purple);
+        }
+        
+        .instructions h3 {
+            color: var(--neon-purple);
+            margin-bottom: 10px;
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+            color: #ccc;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .programs-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            #timer {
+                font-size: 2.5rem;
+            }
+            
+            .vote-control {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+        
+        /* 投票进度动画 */
+        .progress-animation {
+            animation: progress-pulse 0.5s ease-in-out;
+        }
+        
+        @keyframes progress-pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+        
+        /* 倒计时闪烁效果 */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 年会节目投票 🎤</h1>
+            <p>请为您喜爱的节目投票，每人可投5票，投给不同的节目</p>
+        </div>
+        
+        <div class="timer-container">
+            <div class="timer-title">⏰ 投票倒计时</div>
+            <div id="timer">02:00</div>
+        </div>
+        
+        <div class="status-info">
+            <div id="status-text">等待开始投票...</div>
+            <div>剩余票数: <span id="votes-remaining">5</span>/5</div>
+        </div>
+        
+        <div class="vote-control">
+            <button id="start-vote-btn" class="btn btn-start" disabled>等待主屏幕开始投票</button>
+            <button id="reset-vote-btn" class="btn btn-reset">重置我的投票</button>
+        </div>
+        
+        <div id="programs-container" class="programs-grid">
+            <!-- 节目卡片将通过JS动态生成 -->
+        </div>
+        
+        <div class="instructions">
+            <h3>投票说明：</h3>
+            <ul>
+                <li>每人共有5票，可以投给5个不同的节目</li>
+                <li>每个节目只能投一次票</li>
+                <li>投票开始后，您有2分钟时间进行投票</li>
+                <li>投票结束后，结果将实时显示在大屏幕上</li>
+                <li>请公平公正地为您喜爱的节目投票</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 投票系统数据
+        const VOTE_DB_KEY = 'annual_vote_data';
+        const programs = [
+            { id: 1, title: "开场舞蹈《未来之光》", description: "科技感十足的现代舞蹈，展现青春活力", color: "#ff0055" },
+            { id: 2, title: "歌曲串烧《岁月如歌》", description: "经典老歌新唱，唤起美好回忆", color: "#b900ff" },
+            { id: 3, title: "小品《办公室的故事》", description: "职场趣事改编，笑点不断", color: "#00eaff" },
+            { id: 4, title: "魔术表演《梦幻之夜》", description: "神秘魔术，见证奇迹时刻", color: "#ffd700" },
+            { id: 5, title: "乐器合奏《星空交响》", description: "多种乐器合奏，打造听觉盛宴", color: "#00ff9d" },
+            { id: 6, title: "创意走秀《时尚前沿》", description: "员工自制服装，展现创意无限", color: "#ff9500" },
+            { id: 7, title: "相声《职场那些事儿》", description: "幽默诙谐，道出职场心声", color: "#9d00ff" },
+            { id: 8, title: "合唱《明天会更好》", description: "经典合唱，传递正能量", color: "#00ffea" },
+            { id: 9, title: "舞蹈《古风雅韵》", description: "中国传统舞蹈，展现古典之美", color: "#ff0062" },
+            { id: 10, title: "舞台剧《我们的故事》", description: "公司发展历程改编，感人至深", color: "#00b8ff" }
+        ];
+
+        let voteData = {
+            isActive: false,
+            timeRemaining: 120, // 2分钟，单位：秒
+            programs: programs.map(p => ({ ...p, votes: 0 })),
+            userVotes: [], // 存储用户已投票的节目ID
+            totalVotes: 0
+        };
+
+        let timerInterval = null;
+        let userId = null;
+        let voteUpdateInterval = null;
+
+        // 初始化
+        function init() {
+            loadVoteData();
+            generateUserId();
+            renderPrograms();
+            updateUI();
+            
+            // 从主屏幕接收投票状态
+            window.addEventListener('storage', handleStorageEvent);
+            
+            // 开始监听主屏幕数据更新
+            startListeningForUpdates();
+            
+            console.log("投票页面初始化完成");
+        }
+
+        // 生成用户ID（简易版）
+        function generateUserId() {
+            if (!localStorage.getItem('vote_user_id')) {
+                userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('vote_user_id', userId);
+            } else {
+                userId = localStorage.getItem('vote_user_id');
+            }
+            console.log("用户ID:", userId);
+        }
+
+        // 加载投票数据
+        function loadVoteData() {
+            const saved = localStorage.getItem(VOTE_DB_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    voteData = { ...voteData, ...parsed };
+                    console.log("加载投票数据成功:", voteData);
+                } catch(e) {
+                    console.error("解析投票数据失败:", e);
+                    resetLocalVoteData();
+                }
+            }
+            
+            // 加载用户投票记录
+            const userVotesKey = `${VOTE_DB_KEY}_${userId}`;
+            const userVotes = localStorage.getItem(userVotesKey);
+            if (userVotes) {
+                try {
+                    voteData.userVotes = JSON.parse(userVotes);
+                    console.log("加载用户投票记录:", voteData.userVotes);
+                } catch(e) {
+                    console.error("解析用户投票记录失败:", e);
+                    voteData.userVotes = [];
+                }
+            }
+        }
+
+        // 重置本地投票数据
+        function resetLocalVoteData() {
+            voteData = {
+                isActive: false,
+                timeRemaining: 120,
+                programs: programs.map(p => ({ ...p, votes: 0 })),
+                userVotes: [],
+                totalVotes: 0
+            };
+        }
+
+        // 保存投票数据到主屏幕
+        function saveVoteData() {
+            localStorage.setItem(VOTE_DB_KEY, JSON.stringify(voteData));
+            
+            // 保存用户投票记录
+            const userVotesKey = `${VOTE_DB_KEY}_${userId}`;
+            localStorage.setItem(userVotesKey, JSON.stringify(voteData.userVotes));
+            
+            // 通知主屏幕投票数据已更新
+            localStorage.setItem('vote_updated', Date.now().toString());
+            console.log("投票数据已保存并通知主屏幕");
+        }
+
+        // 处理存储事件（从主屏幕接收状态）
+        function handleStorageEvent(e) {
+            console.log("存储事件:", e.key, e.newValue);
+            
+            if (e.key === 'vote_control') {
+                try {
+                    const data = JSON.parse(e.newValue);
+                    console.log("收到投票控制指令:", data);
+                    
+                    if (data.action === 'start') {
+                        startVoting();
+                    } else if (data.action === 'stop') {
+                        stopVoting();
+                    } else if (data.action === 'reset') {
+                        resetVoting();
+                    }
+                } catch(err) {
+                    console.error("解析投票控制指令失败:", err);
+                }
+            } else if (e.key === VOTE_DB_KEY) {
+                // 主屏幕数据更新，重新加载
+                loadVoteData();
+                renderPrograms();
+                updateUI();
+            }
+        }
+
+        // 开始监听主屏幕数据更新
+        function startListeningForUpdates() {
+            // 每2秒检查一次主屏幕数据
+            if (voteUpdateInterval) clearInterval(voteUpdateInterval);
+            voteUpdateInterval = setInterval(() => {
+                loadVoteData();
+                renderPrograms();
+                updateUI();
+            }, 2000);
+        }
+
+        // 渲染节目卡片
+        function renderPrograms() {
+            const container = document.getElementById('programs-container');
+            container.innerHTML = '';
+            
+            voteData.programs.forEach(program => {
+                const isVoted = voteData.userVotes.includes(program.id);
+                
+                const card = document.createElement('div');
+                card.className = `program-card ${isVoted ? 'voted' : ''}`;
+                card.innerHTML = `
+                    <div class="program-number">${program.id}</div>
+                    <h3 class="program-title">${program.title}</h3>
+                    <p class="program-desc">${program.description}</p>
+                    <button class="vote-btn ${isVoted ? 'voted' : ''}" 
+                            data-id="${program.id}" 
+                            ${!voteData.isActive || isVoted || voteData.userVotes.length >= 5 ? 'disabled' : ''}>
+                        ${isVoted ? '已投票 ✓' : '投票'}
+                    </button>
+                    <div class="votes-count">票数: <span id="votes-${program.id}" class="${program.votes > 0 ? 'progress-animation' : ''}">${program.votes}</span></div>
+                `;
+                
+                container.appendChild(card);
+            });
+            
+            // 添加投票按钮事件监听
+            document.querySelectorAll('.vote-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const programId = parseInt(this.getAttribute('data-id'));
+                    voteForProgram(programId);
+                });
+            });
+        }
+
+        // 为节目投票
+        function voteForProgram(programId) {
+            if (!voteData.isActive) {
+                alert('投票尚未开始！');
+                return;
+            }
+            
+            if (voteData.userVotes.length >= 5) {
+                alert('您已用完所有投票次数！');
+                return;
+            }
+            
+            if (voteData.userVotes.includes(programId)) {
+                alert('您已经为该节目投过票了！');
+                return;
+            }
+            
+            // 更新数据
+            const program = voteData.programs.find(p => p.id === programId);
+            if (program) {
+                program.votes++;
+                voteData.userVotes.push(programId);
+                voteData.totalVotes++;
+                
+                // 保存并更新UI
+                saveVoteData();
+                renderPrograms();
+                updateUI();
+                
+                // 播放投票成功音效
+                playVoteSound();
+                
+                // 添加投票成功动画
+                const voteBtn = document.querySelector(`.vote-btn[data-id="${programId}"]`);
+                if (voteBtn) {
+                    voteBtn.classList.add('voted');
+                }
+                
+                // 显示投票成功提示
+                showVoteSuccess(program.title);
+            }
+        }
+
+        // 显示投票成功提示
+        function showVoteSuccess(programTitle) {
+            const statusEl = document.getElementById('status-text');
+            const originalText = statusEl.textContent;
+            
+            statusEl.innerHTML = `✅ 成功为 <span style="color: var(--neon-gold);">${programTitle}</span> 投票！`;
+            statusEl.style.color = 'var(--neon-blue)';
+            
+            setTimeout(() => {
+                statusEl.innerHTML = originalText;
+                statusEl.style.color = 'var(--neon-gold)';
+            }, 2000);
+        }
+
+        // 播放投票音效
+        function playVoteSound() {
+            const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3');
+            audio.volume = 0.3;
+            audio.play().catch(e => console.log("音频播放失败:", e));
+        }
+
+        // 开始投票
+        function startVoting() {
+            if (voteData.isActive) return;
+            
+            voteData.isActive = true;
+            voteData.timeRemaining = 120;
+            
+            // 启动定时器
+            timerInterval = setInterval(updateTimer, 1000);
+            
+            // 保存状态并更新UI
+            saveVoteData();
+            updateUI();
+            renderPrograms();
+            
+            // 通知主屏幕投票已开始
+            localStorage.setItem('vote_started', Date.now().toString());
+            
+            // 播放开始音效
+            const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-game-show-intro-music-687.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(e => console.log("音频播放失败:", e));
+            
+            // 显示开始提示
+            alert('投票已开始！您有2分钟时间为喜爱的节目投票。');
+        }
+
+        // 停止投票
+        function stopVoting() {
+            voteData.isActive = false;
+            clearInterval(timerInterval);
+            
+            saveVoteData();
+            updateUI();
+            
+            // 通知主屏幕投票已结束
+            localStorage.setItem('vote_ended', Date.now().toString());
+            
+            // 显示结束提示
+            alert('投票已结束！感谢您的参与。');
+        }
+
+        // 重置个人投票
+        function resetVoting() {
+            if (confirm('确定要重置您的投票吗？这将清除您已投的所有票！')) {
+                // 从总票数中减去用户已投的票数
+                voteData.userVotes.forEach(programId => {
+                    const program = voteData.programs.find(p => p.id === programId);
+                    if (program && program.votes > 0) {
+                        program.votes--;
+                    }
+                });
+                
+                voteData.userVotes = [];
+                voteData.totalVotes = 0;
+                
+                // 清除用户投票记录
+                const userVotesKey = `${VOTE_DB_KEY}_${userId}`;
+                localStorage.removeItem(userVotesKey);
+                
+                saveVoteData();
+                renderPrograms();
+                updateUI();
+                
+                alert('您的投票已重置！');
+            }
+        }
+
+        // 更新计时器
+        function updateTimer() {
+            if (voteData.timeRemaining > 0) {
+                voteData.timeRemaining--;
+                
+                const minutes = Math.floor(voteData.timeRemaining / 60);
+                const seconds = voteData.timeRemaining % 60;
+                document.getElementById('timer').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // 最后10秒闪烁效果
+                if (voteData.timeRemaining <= 10) {
+                    document.getElementById('timer').style.color = 'var(--neon-pink)';
+                    document.getElementById('timer').style.animation = 'pulse 0.5s infinite';
+                }
+            } else {
+                // 时间到，停止投票
+                stopVoting();
+                alert('投票时间到！');
+            }
+        }
+
+        // 更新UI状态
+        function updateUI() {
+            const startBtn = document.getElementById('start-vote-btn');
+            const statusText = document.getElementById('status-text');
+            const votesRemaining = document.getElementById('votes-remaining');
+            
+            if (voteData.isActive) {
+                startBtn.disabled = true;
+                startBtn.textContent = '投票进行中...';
+                statusText.textContent = '投票进行中，请为您喜爱的节目投票！';
+                statusText.style.color = 'var(--neon-blue)';
+            } else {
+                startBtn.disabled = true; // 只能由主屏幕控制
+                startBtn.textContent = '等待主屏幕开始投票';
+                statusText.textContent = voteData.totalVotes > 0 ? 
+                    '投票已结束，感谢您的参与！' : '等待开始投票...';
+                statusText.style.color = voteData.totalVotes > 0 ? 'var(--neon-gold)' : 'var(--neon-blue)';
+            }
+            
+            votesRemaining.textContent = 5 - voteData.userVotes.length;
+            
+            // 更新倒计时显示
+            if (voteData.isActive && timerInterval) {
+                const minutes = Math.floor(voteData.timeRemaining / 60);
+                const seconds = voteData.timeRemaining % 60;
+                document.getElementById('timer').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+
+        // 事件监听
+        document.getElementById('reset-vote-btn').addEventListener('click', resetVoting);
+
+        // 初始化应用
+        window.addEventListener('DOMContentLoaded', init);
+        
+        // 页面可见性变化时重新加载数据
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                loadVoteData();
+                renderPrograms();
+                updateUI();
+            }
+        });
+    </script>
+</body>
+</html>
