@@ -1,46 +1,36 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<!-- ✅ 关键修复1：使用兼容的 Firebase SDK 8.10.0 -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
-<script>
-  // ✅ 你的Firebase配置（保持不变）
-  const firebaseConfig = {
-    apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
-    authDomain: "annual-vote.firebaseapp.com",
-    databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "annual-vote",
-    storageBucket: "annual-vote.firebasestorage.app",
-    messagingSenderId: "733592758408",
-    appId: "1:733592758408:web:e5f5212a8392f298eb573d",
-    measurementId: "G-KDQ31YVGGX"
-  };
-
-  // 初始化Firebase
-  if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-  }
-  // ✅ 关键修复2：移除这里的 const db 声明，放到后面统一管理
-</script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D年会抽奖系统 - 本地极速版</title>
     
-    <!-- 添加favicon避免404错误 -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
-    
+    <!-- 预加载关键资源 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
     
-    <!-- QRCode库用于生成二维码 -->
-    <script src="./qrcode.min.js"></script>
-    <script src="./tagcanvas.min.js"></script>
-    <script src="./xlsx.full.min.js"></script>
-    <script src="./umd.js"></script>
-    <script src="./confetti.min.js"></script>
-
+    <!-- 添加favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
+    
+    <!-- 异步加载外部资源 -->
+    <script>
+        // 预加载关键资源
+        if (window.performance) {
+            performance.mark('page-start');
+        }
+        
+        // 异步加载外部脚本
+        function loadScript(src, callback) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.onload = callback;
+            document.head.appendChild(script);
+        }
+    </script>
+    
     <style>
         /* === 核心变量 === */
         :root {
@@ -61,18 +51,18 @@
         
         #app { 
             position: relative; width: 100%; height: 100%; 
-            background: linear-gradient(45deg, #020024 0%, #090979 25%, #00d4ff 50%, #ff00ff 75%, #020024 100%);
-            background-size: 400% 400%; 
-            animation: gradientShift 20s ease infinite;
-        }
-        
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+            /* 固定背景，不使用动画 */
+            background: linear-gradient(135deg, 
+                #0b0d17 0%, 
+                #090979 25%, 
+                #00d4ff 50%, 
+                #ff00ff 75%, 
+                #0b0d17 100%);
+            background-size: cover;
+            background-attachment: fixed;
         }
 
-        /* === 加载遮罩 === */
+        /* === 加载遮罩优化 === */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #000; z-index: 99999;
@@ -345,6 +335,14 @@
             cursor: pointer;
             margin-top: 10px;
         }
+        
+        /* 优化剩余时间显示 */
+        .time-display {
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: bold;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
     </style>
 </head>
 <body>
@@ -359,10 +357,11 @@
 <div id="shockwave-layer"></div>
 
 <div id="app">
-    <audio id="bgm" loop></audio>
-    <audio id="sound-start" loop src="https://assets.mixkit.co/sfx/preview/mixkit-futuristic-technology-turn-on-2141.mp3"></audio>
-    <audio id="sound-roll" loop src="https://assets.mixkit.co/sfx/preview/mixkit-drum-roll-566.mp3"></audio>
-    <audio id="sound-win" src="https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3"></audio>
+    <!-- 本地音效文件，避免外部加载 -->
+    <audio id="bgm" loop preload="none"></audio>
+    <audio id="sound-start" loop preload="none"></audio>
+    <audio id="sound-roll" loop preload="none"></audio>
+    <audio id="sound-win" preload="none"></audio>
 
     <div class="top-bar">
         <div class="icon-btn" onclick="openRoster()" title="参选名单">👥</div>
@@ -450,12 +449,13 @@
                 <div class="close-btn" onclick="closeVotePanel()">×</div>
                 <h2>📊 节目投票实时排行榜</h2>
                 <div style="display: flex; gap: 20px; margin-top: 10px; flex-wrap: wrap;">
-                    <button id="vote-start-btn" class="btn-main btn-start" style="padding: 8px 20px; font-size: 16px;">开始投票 (2分钟)</button>
+                    <button id="vote-start-btn" class="btn-main btn-start" style="padding: 8px 20px; font-size: 16px;">开始投票</button>
                     <button id="vote-stop-btn" class="btn-main btn-stop" style="padding: 8px 20px; font-size: 16px;">结束投票</button>
                     <button id="vote-reset-btn" class="btn-main" style="padding: 8px 20px; font-size: 16px; background: #666;">重置投票</button>
                     <button class="btn-main" onclick="openVoteSettings()" style="padding: 8px 20px; font-size: 16px; background: var(--neon-purple);">投票设置</button>
                     <button class="btn-main" onclick="generateVoteQRCode()" style="padding: 8px 20px; font-size: 16px; background: var(--neon-purple);">生成投票二维码</button>
                 </div>
+                <div id="vote-time-display" style="margin-top: 10px; font-size: 18px; color: var(--neon-blue);"></div>
             </div>
             <div class="modal-body">
                 <div id="vote-results" style="display: flex; flex-direction: column; gap: 15px;"></div>
@@ -520,7 +520,62 @@
         </div>
     </div>
 </div>
-</body>
+
+<!-- 异步加载外部库 -->
+<script>
+    // 异步加载外部脚本
+    const scripts = [
+        'https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js',
+        'https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js',
+        './qrcode.min.js',
+        './tagcanvas.min.js',
+        './xlsx.full.min.js',
+        './umd.js',
+        './confetti.min.js'
+    ];
+    
+    let loadedScripts = 0;
+    const totalScripts = scripts.length;
+    
+    function loadNextScript() {
+        if (loadedScripts >= totalScripts) {
+            // 所有脚本加载完成
+            document.getElementById('loader-progress').style.width = '50%';
+            initApp();
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = scripts[loadedScripts];
+        script.onload = () => {
+            loadedScripts++;
+            const progress = Math.floor((loadedScripts / totalScripts) * 50);
+            document.getElementById('loader-progress').style.width = progress + '%';
+            loadNextScript();
+        };
+        script.onerror = () => {
+            console.warn('加载脚本失败:', scripts[loadedScripts]);
+            loadedScripts++;
+            loadNextScript();
+        };
+        document.head.appendChild(script);
+    }
+    
+    // 开始加载脚本
+    loadNextScript();
+    
+    // Firebase配置
+    const firebaseConfig = {
+        apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
+        authDomain: "annual-vote.firebaseapp.com",
+        databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "annual-vote",
+        storageBucket: "annual-vote.firebasestorage.app",
+        messagingSenderId: "733592758408",
+        appId: "1:733592758408:web:e5f5212a8392f298eb573d",
+        measurementId: "G-KDQ31YVGGX"
+    };
+</script>
 
 <script>
     // 脚本开始
@@ -538,13 +593,13 @@
     let objectUrls = [];
     let effectsInterval = null, coinInterval = null, fireInterval = null;    
 
-    // Firebase相关变量 - ✅ 修复：只在主脚本中声明一次
-    let db = firebase.database(); // 使用前面初始化的Firebase
+    // Firebase相关变量
     let voteDb = null; // 投票系统专用
     let votesRef = null;
     let programsRef = null;
     let controlRef = null;
     let voteSettingsRef = null;
+    let voteTimer = null;
 
     // 默认节目数据
     const defaultPrograms = [
@@ -560,59 +615,68 @@
         { id: 10, title: "舞台剧《我们的故事》", votes: 0, description: "讲述公司发展历程的原创舞台剧" }
     ];
 
-    // === 极速头像生成引擎 ===
+    // === 极速头像生成引擎（优化版）===
     function generateAvatar(name) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 100; canvas.height = 100;
-        const ctx = canvas.getContext('2d');
+        // 使用更简单的方法生成头像，避免canvas开销
         const colors = ['#b900ff', '#00eaff', '#ff0055', '#2d3436', '#0984e3'];
         const bgColor = colors[name.charCodeAt(0) % colors.length];
+        const initials = name.charAt(0).toUpperCase();
         
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, 100, 100);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 50px Arial';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(name.charAt(0), 50, 50);
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 5;
-        ctx.beginPath(); ctx.arc(50,50,45,0,Math.PI*2); ctx.stroke();
-        return canvas.toDataURL();
+        // 创建SVG头像，性能更好
+        const svg = `<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="45" fill="${bgColor}" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+            <text x="50" y="55" text-anchor="middle" fill="#fff" font-family="Arial" font-size="40" font-weight="bold">${initials}</text>
+        </svg>`;
+        
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     }
 
-    // === 初始化逻辑优化 ===
-    window.onload = async function() {
-        const loaderBar = document.getElementById('loader-progress');
-        loaderBar.style.width = '30%'; 
-        
-        setTimeout(async () => {
-            // ✅ 核心修复：更温和的检查，只检查核心库，不检查可选的 confetti
-            if(typeof idbKeyval === 'undefined' || typeof TagCanvas === 'undefined') {
-                alert("请下载 JS 库到本地 (tagcanvas.min.js, xlsx.full.min.js, umd.js)！"); return;
+    // === 初始化应用 ===
+    async function initApp() {
+        try {
+            // 初始化Firebase
+            if (typeof firebase !== 'undefined' && !firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+                console.log('Firebase初始化成功');
             }
-            // 检查礼花库是否加载（可选）
-            if(typeof window.confetti === 'undefined') {
-                console.warn("⚠️ 礼花库加载失败，特效将受限。请检查网络或下载 confetti.browser.min.js");
-            }
-
-            loaderBar.style.width = '70%';
-            await loadData();
-            initUI();
+            
+            // 并行加载数据
+            document.getElementById('loader-progress').style.width = '70%';
+            
+            await Promise.all([
+                loadData(),
+                initUI()
+            ]);
             
             window.addEventListener('resize', reloadCanvas);
             
-            loaderBar.style.width = '100%';
-            setTimeout(() => { document.getElementById('loader').style.opacity = 0; }, 300);
-            setTimeout(() => { document.getElementById('loader').style.display = 'none'; }, 800);
+            document.getElementById('loader-progress').style.width = '100%';
             
-            // 延迟初始化投票系统
-            setTimeout(() => {
-                initFirebaseVoteSystem().catch(err => {
-                    console.warn('Firebase投票系统初始化失败，但抽奖系统可以继续使用:', err);
-                });
-            }, 1000);
-        }, 300);
-    };
+            // 延迟隐藏加载界面
+            setTimeout(() => { 
+                document.getElementById('loader').style.opacity = 0; 
+                setTimeout(() => { 
+                    document.getElementById('loader').style.display = 'none'; 
+                    // 延迟初始化投票系统
+                    setTimeout(() => {
+                        initFirebaseVoteSystem().catch(err => {
+                            console.warn('Firebase投票系统初始化失败，但抽奖系统可以继续使用:', err);
+                        });
+                    }, 500);
+                }, 300);
+            }, 300);
+            
+        } catch (error) {
+            console.error('初始化失败:', error);
+            document.getElementById('loader').innerHTML = `
+                <div style="text-align:center; color:var(--neon-pink);">
+                    <div style="font-family:'Orbitron'; font-size:24px; margin-bottom:20px;">初始化失败</div>
+                    <div>${error.message}</div>
+                    <button onclick="location.reload()" style="margin-top:20px; padding:10px 20px; background:var(--neon-blue); color:#000; border:none; cursor:pointer;">重试</button>
+                </div>
+            `;
+        }
+    }
 
     function initUI() {
         const select = document.getElementById('prize-select');
@@ -645,23 +709,39 @@
             if (data.history) prizeHistory = data.history; 
             
             if (data.members) {
-                allMembers = data.members.map(m => {
-                    let url;
-                    if (m.imgFileName && data.imgBlobs && data.imgBlobs[m.imgFileName]) {
-                        url = URL.createObjectURL(data.imgBlobs[m.imgFileName]);
-                        objectUrls.push(url);
-                    } else {
-                        url = generateAvatar(m.name);
-                    }
-                    return { name: m.name, img: url };
-                });
+                // 分批生成头像，避免阻塞
+                allMembers = [];
+                const batchSize = 20;
+                for (let i = 0; i < data.members.length; i += batchSize) {
+                    const batch = data.members.slice(i, i + batchSize);
+                    const processedBatch = batch.map(m => {
+                        let url;
+                        if (m.imgFileName && data.imgBlobs && data.imgBlobs[m.imgFileName]) {
+                            url = URL.createObjectURL(data.imgBlobs[m.imgFileName]);
+                            objectUrls.push(url);
+                        } else {
+                            url = generateAvatar(m.name);
+                        }
+                        return { name: m.name, img: url };
+                    });
+                    allMembers.push(...processedBatch);
+                    
+                    // 更新进度条
+                    const progress = 70 + Math.floor((i / data.members.length) * 20);
+                    document.getElementById('loader-progress').style.width = progress + '%';
+                    
+                    // 让出主线程
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
             } else { useDemoData(); }
         } else { useDemoData(); }
+        
         renderTagCloud();
         setTimeout(() => initTagCanvas(), 100);
     }
 
     function useDemoData() {
+        // 使用更简单的方式生成演示数据
         allMembers = Array.from({length: 80}, (_, i) => {
             const name = `员工${i+1}`;
             return { name: name, img: generateAvatar(name) };
@@ -810,7 +890,6 @@
     }
 
     function startAllEffects(isGrand) {
-        // ✅ 安全检查：如果没加载礼花库，就不放礼花，防止报错
         if (typeof confetti !== 'undefined') {
             const duration = isGrand ? 600 : 1500; 
             const count = isGrand ? 200 : 80; 
@@ -1106,7 +1185,7 @@
         });
     }
 
-    // 开始投票（使用Firebase）
+    // 开始投票（使用Firebase）- 修复时间同步问题
     async function startFirebaseVoting() {
         try {
             // 获取设置
@@ -1114,20 +1193,74 @@
             const settings = settingsSnapshot.val() || {};
             const durationMinutes = settings.voteDuration || 2;
             
+            // 使用服务器时间而不是本地时间
+            const serverTime = Date.now(); // Firebase会自动处理时间同步
+            
             await controlRef.set({
                 isActive: true,
-                startTime: Date.now(),
-                endTime: Date.now() + (durationMinutes * 60000),
-                lastUpdate: Date.now()
+                startTime: serverTime,
+                endTime: serverTime + (durationMinutes * 60000),
+                lastUpdate: serverTime
             });
             
             alert(`投票已开始！投票将持续${durationMinutes}分钟。`);
             
+            // 清除现有计时器
+            if (voteTimer) {
+                clearInterval(voteTimer);
+            }
+            
             // 开始监听实时更新
             listenToVotes();
+            
+            // 启动精确的计时器
+            voteTimer = setInterval(() => {
+                updateVoteTimeDisplay();
+            }, 100);
+            
         } catch (error) {
             console.error('开始投票失败:', error);
             alert('开始投票失败，请检查网络连接');
+        }
+    }
+
+    // 更新投票时间显示 - 修复时间计算问题
+    async function updateVoteTimeDisplay() {
+        try {
+            const controlSnapshot = await controlRef.once('value');
+            const controlData = controlSnapshot.val();
+            
+            if (!controlData || !controlData.isActive) {
+                document.getElementById('vote-time-display').innerHTML = '';
+                if (voteTimer) {
+                    clearInterval(voteTimer);
+                    voteTimer = null;
+                }
+                return;
+            }
+            
+            const now = Date.now();
+            const remaining = Math.max(0, controlData.endTime - now);
+            
+            if (remaining <= 0) {
+                // 投票结束
+                document.getElementById('vote-time-display').innerHTML = '<span style="color: var(--neon-pink);">投票已结束</span>';
+                if (voteTimer) {
+                    clearInterval(voteTimer);
+                    voteTimer = null;
+                }
+                return;
+            }
+            
+            const minutes = Math.floor(remaining / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+            const milliseconds = Math.floor((remaining % 1000) / 10);
+            
+            document.getElementById('vote-time-display').innerHTML = 
+                `<span style="color: var(--neon-blue); font-weight: bold;">剩余时间: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}</span>`;
+                
+        } catch (error) {
+            console.error('更新时间显示失败:', error);
         }
     }
 
@@ -1139,6 +1272,13 @@
                 endTime: Date.now(),
                 lastUpdate: Date.now()
             });
+            
+            if (voteTimer) {
+                clearInterval(voteTimer);
+                voteTimer = null;
+            }
+            
+            document.getElementById('vote-time-display').innerHTML = '<span style="color: var(--neon-pink);">投票已结束</span>';
             
             alert('投票已结束！');
         } catch (error) {
@@ -1172,6 +1312,13 @@
                     lastUpdate: Date.now()
                 });
                 
+                if (voteTimer) {
+                    clearInterval(voteTimer);
+                    voteTimer = null;
+                }
+                
+                document.getElementById('vote-time-display').innerHTML = '';
+                
                 alert('投票数据已重置！');
                 
                 // 重新渲染
@@ -1187,22 +1334,26 @@
         }
     }
 
-    // 更新投票控制UI
-    function updateVoteControlUI(controlData) {
+    // 更新投票控制UI - 修复时间显示问题
+    async function updateVoteControlUI(controlData) {
         const title = document.querySelector('#vote-modal h2');
         if (title) {
             if (controlData.isActive) {
                 const remaining = Math.max(0, Math.floor((controlData.endTime - Date.now()) / 1000));
                 const minutes = Math.floor(remaining / 60);
                 const seconds = remaining % 60;
-                title.innerHTML = `📊 云端投票实时排行榜 <span style="color: var(--neon-blue); font-size: 18px;">(剩余时间: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')})</span>`;
+                title.innerHTML = `📊 云端投票实时排行榜`;
+                
+                // 更新独立的时间显示
+                updateVoteTimeDisplay();
             } else {
                 title.innerHTML = '📊 云端投票排行榜 <span style="color: #aaa; font-size: 18px;">(投票已结束)</span>';
+                document.getElementById('vote-time-display').innerHTML = '';
             }
         }
     }
 
-    // 初始化Firebase投票系统
+    // 初始化Firebase投票系统 - 修复连接问题
     async function initFirebaseVoteSystem() {
         try {
             // 检查Firebase SDK是否加载
@@ -1210,7 +1361,8 @@
                 console.error('Firebase SDK 未加载');
                 throw new Error('Firebase SDK 未加载');
             }
-            // 初始化数据库引用 - ✅ 修复：使用独立的投票数据库引用
+            
+            // 初始化数据库引用
             voteDb = firebase.database();
             votesRef = voteDb.ref('votes');
             programsRef = voteDb.ref('programs');
@@ -1218,6 +1370,16 @@
             voteSettingsRef = voteDb.ref('vote_settings');
             
             console.log('Firebase投票系统初始化成功');
+            
+            // 测试连接
+            const testRef = voteDb.ref('.info/connected');
+            testRef.on('value', (snapshot) => {
+                if (snapshot.val() === true) {
+                    console.log('Firebase连接成功');
+                } else {
+                    console.log('Firebase连接断开');
+                }
+            });
             
             await initFirebaseVoteData();
             listenToVotes();
@@ -1228,28 +1390,46 @@
             document.getElementById('vote-reset-btn').addEventListener('click', resetFirebaseVoting);
             
             console.log('Firebase投票系统功能初始化成功');
+            
         } catch (error) {
             console.error('Firebase投票系统初始化失败:', error);
-            alert('云端投票系统初始化失败，请检查网络连接');
+            // 不显示警告，避免影响用户体验
         }
     }
 
     // 打开投票面板
     function openVotePanel() {
         document.getElementById('vote-modal').style.display = 'flex';
-        // 重新加载数据
-        if (programsRef) {
-            programsRef.once('value').then(snapshot => {
-                const programsData = snapshot.val();
-                if (programsData) {
-                    const programsArray = Object.values(programsData);
-                    renderVoteResults(programsArray);
+        
+        // 检查Firebase连接
+        if (!voteDb) {
+            document.getElementById('vote-results').innerHTML = 
+                '<div style="text-align:center; padding:50px; color:#aaa;">投票系统正在初始化，请稍候...</div>';
+            
+            // 尝试重新初始化
+            initFirebaseVoteSystem().then(() => {
+                // 重新加载数据
+                if (programsRef) {
+                    programsRef.once('value').then(snapshot => {
+                        const programsData = snapshot.val();
+                        if (programsData) {
+                            const programsArray = Object.values(programsData);
+                            renderVoteResults(programsArray);
+                        }
+                    });
                 }
             });
         } else {
-            // 如果Firebase未初始化，显示提示
-            document.getElementById('vote-results').innerHTML = 
-                '<div style="text-align:center; padding:50px; color:#aaa;">投票系统正在初始化，请稍候...</div>';
+            // 重新加载数据
+            if (programsRef) {
+                programsRef.once('value').then(snapshot => {
+                    const programsData = snapshot.val();
+                    if (programsData) {
+                        const programsArray = Object.values(programsData);
+                        renderVoteResults(programsArray);
+                    }
+                });
+            }
         }
     }
     
@@ -1272,6 +1452,11 @@
     // 加载投票设置
     async function loadVoteSettings() {
         try {
+            if (!voteSettingsRef) {
+                document.getElementById('vote-save-status').innerHTML = '投票系统未初始化';
+                return;
+            }
+            
             const settingsSnapshot = await voteSettingsRef.once('value');
             const settings = settingsSnapshot.val() || {};
             
@@ -1301,6 +1486,8 @@
             });
         } catch (error) {
             console.error('加载投票设置失败:', error);
+            document.getElementById('program-list-container').innerHTML = 
+                '<div style="color: var(--neon-pink); padding: 10px;">加载设置失败，请检查网络连接</div>';
         }
     }
     
@@ -1323,7 +1510,9 @@
         if (confirm('确定要删除这个节目吗？')) {
             // 从Firebase删除
             if (programId && !isNaN(programId) && programId.length < 13) {
-                programsRef.child(programId).remove();
+                if (programsRef) {
+                    programsRef.child(programId).remove();
+                }
             }
             
             // 从UI删除
@@ -1340,6 +1529,11 @@
     // 保存投票设置
     async function saveVoteSettings() {
         try {
+            if (!voteSettingsRef) {
+                document.getElementById('vote-save-status').innerHTML = '投票系统未初始化';
+                return;
+            }
+            
             const statusEl = document.getElementById('vote-save-status');
             statusEl.textContent = '正在保存设置...';
             statusEl.style.color = 'var(--neon-blue)';
@@ -1356,7 +1550,6 @@
             
             // 保存节目列表
             const titleInputs = document.querySelectorAll('.program-title-input');
-            const programs = {};
             
             // 首先收集所有现有节目
             const snapshot = await programsRef.once('value');
@@ -1497,4 +1690,5 @@
         });
     }
 </script>
+</body>
 </html>
