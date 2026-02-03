@@ -730,7 +730,6 @@
         let voteSettingsRef;
         let selectedPrograms = new Set();
         let maxVotesPerUser = 1;
-        let voteEndTime = null;
         let isVotingActive = false;
         let voteTimer = null;
         let deviceId = null;
@@ -738,7 +737,8 @@
         let programsData = {};
         let programsListener = null;
         let controlListener = null;
-        let lastVoteCheck = 0;
+        let clientTimeOffset = 0; // 客户端时间偏移量
+        let lastControlData = null; // 缓存上一次的控制数据
 
         // 更新加载状态
         function updateLoadingStatus(message, detail = '') {
@@ -787,6 +787,26 @@
             hasVoted = true;
         }
 
+        // 获取服务器时间偏移量（估算）
+        async function getServerTimeOffset() {
+            try {
+                const startTime = Date.now();
+                const ref = db.ref('.info/serverTimeOffset');
+                const snapshot = await ref.once('value');
+                const offset = snapshot.val() || 0;
+                const serverTime = Date.now() + offset;
+                
+                // 计算网络延迟
+                const latency = Date.now() - startTime;
+                const adjustedOffset = offset - latency / 2;
+                
+                return adjustedOffset;
+            } catch (error) {
+                console.warn('获取服务器时间偏移量失败，使用本地时间:', error);
+                return 0;
+            }
+        }
+
         // 初始化应用
         document.addEventListener('DOMContentLoaded', async function() {
             try {
@@ -804,6 +824,10 @@
                 
                 updateLoadingStatus('正在初始化投票系统...');
                 await initializeFirebase();
+                
+                // 获取服务器时间偏移量
+                clientTimeOffset = await getServerTimeOffset();
+                console.log('时间偏移量:', clientTimeOffset);
                 
                 // 监听投票状态变化
                 setupVoteListeners();
@@ -882,8 +906,10 @@
                 const controlData = snapshot.val();
                 
                 if (controlData) {
+                    // 缓存控制数据
+                    lastControlData = controlData;
+                    
                     isVotingActive = controlData.isActive || false;
-                    voteEndTime = controlData.endTime || null;
                     
                     updateStatusUI();
                     
@@ -896,9 +922,15 @@
                         loadVotingInterface();
                     } else {
                         // 投票未开始或已结束
-                        if (voteEndTime && Date.now() > voteEndTime) {
-                            // 投票已结束，显示结果
-                            loadFinalResults();
+                        if (controlData.endTime) {
+                            const serverTime = Date.now() + clientTimeOffset;
+                            if (serverTime > controlData.endTime) {
+                                // 投票已结束，显示结果
+                                loadFinalResults();
+                            } else {
+                                // 投票未开始，显示等待
+                                showWaitingForVote();
+                            }
                         } else {
                             // 投票未开始，显示等待
                             showWaitingForVote();
@@ -942,9 +974,15 @@
                 subtitle.textContent = '请选择您喜欢的节目';
             } else {
                 statusDot.classList.remove('active');
-                if (voteEndTime && Date.now() > voteEndTime) {
-                    statusText.textContent = '投票已结束';
-                    subtitle.textContent = '投票结果';
+                if (lastControlData && lastControlData.endTime) {
+                    const serverTime = Date.now() + clientTimeOffset;
+                    if (serverTime > lastControlData.endTime) {
+                        statusText.textContent = '投票已结束';
+                        subtitle.textContent = '投票结果';
+                    } else {
+                        statusText.textContent = '投票未开始';
+                        subtitle.textContent = '请等待投票开始';
+                    }
                 } else {
                     statusText.textContent = '投票未开始';
                     subtitle.textContent = '请等待投票开始';
@@ -961,7 +999,11 @@
             
             const waitingStatus = document.getElementById('waiting-status');
             if (waitingStatus) {
-                waitingStatus.textContent = '投票即将开始，请耐心等待...';
+                if (lastControlData && lastControlData.startTime) {
+                    waitingStatus.textContent = '投票即将开始，请耐心等待...';
+                } else {
+                    waitingStatus.textContent = '投票尚未开始，请等待管理员开启投票...';
+                }
             }
         }
 
@@ -973,8 +1015,11 @@
             document.getElementById('error-message').style.display = 'none';
             
             // 如果投票已结束，显示结果
-            if (voteEndTime && Date.now() > voteEndTime) {
-                loadFinalResults();
+            if (lastControlData && lastControlData.endTime) {
+                const serverTime = Date.now() + clientTimeOffset;
+                if (serverTime > lastControlData.endTime) {
+                    loadFinalResults();
+                }
             }
         }
 
@@ -1033,7 +1078,7 @@
         function updateTimeDisplay() {
             const timeElement = document.getElementById('time-remaining');
             
-            if (!voteEndTime || !isVotingActive) {
+            if (!lastControlData || !lastControlData.endTime || !isVotingActive) {
                 timeElement.textContent = '--:--';
                 // 清除定时器
                 if (voteTimer) {
@@ -1043,8 +1088,9 @@
                 return;
             }
             
-            const now = Date.now();
-            const remaining = Math.max(0, voteEndTime - now);
+            // 使用服务器时间计算
+            const serverTime = Date.now() + clientTimeOffset;
+            const remaining = Math.max(0, lastControlData.endTime - serverTime);
             
             if (remaining <= 0) {
                 timeElement.textContent = '00:00';
@@ -1063,6 +1109,11 @@
             
             timeElement.textContent = 
                 `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            // 确保定时器运行
+            if (!voteTimer) {
+                voteTimer = setInterval(updateTimeDisplay, 500);
+            }
         }
 
         // 加载节目数据（修复重复问题）
@@ -1255,7 +1306,7 @@
                 // 创建投票记录
                 const voteRecords = Array.from(selectedPrograms).map(programId => ({
                     programId: parseInt(programId),
-                    timestamp: Date.now(),
+                    timestamp: Date.now() + clientTimeOffset, // 使用服务器时间
                     deviceId: deviceId
                 }));
                 
@@ -1267,7 +1318,7 @@
                     await programsRef.child(vote.programId).transaction(program => {
                         if (program) {
                             program.votes = (program.votes || 0) + 1;
-                            program.lastUpdate = Date.now();
+                            program.lastUpdate = Date.now() + clientTimeOffset;
                         }
                         return program;
                     });
