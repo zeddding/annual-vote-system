@@ -1064,41 +1064,24 @@
     
     // ==================== Firebase投票功能 ====================
 
-    // 初始化Firebase投票数据
-    async function initFirebaseVoteData() {
-        try {
-            // 初始化设置
-            const settingsSnapshot = await voteSettingsRef.once('value');
-            if (!settingsSnapshot.exists()) {
-                await voteSettingsRef.set({
-                    votesPerUser: 1,
-                    voteDuration: 2, // 分钟
-                    lastUpdate: Date.now()
-                });
-            }
-            
-            // 初始化节目数据
-            const snapshot = await programsRef.once('value');
-            if (!snapshot.exists()) {
-                const initPromises = defaultPrograms.map(program => {
-                    return programsRef.child(program.id).set({
-                        ...program,
-                        lastUpdate: Date.now()
-                    });
-                });
-                await Promise.all(initPromises);
-            }
-        } catch (error) {
-            console.error('初始化Firebase数据失败:', error);
-        }
-    }
-
-    // 监听投票数据变化
+    // 监听投票数据变化 - 已修复重复问题
     function listenToVotes() {
         programsRef.on('value', (snapshot) => {
             const programsData = snapshot.val();
             if (programsData) {
-                const programsArray = Object.values(programsData);
+                // 去重处理
+                const uniquePrograms = {};
+                const uniqueIds = new Set();
+                
+                Object.keys(programsData).forEach(key => {
+                    const program = programsData[key];
+                    if (program && program.id && !uniqueIds.has(program.id)) {
+                        uniqueIds.add(program.id);
+                        uniquePrograms[key] = program;
+                    }
+                });
+                
+                const programsArray = Object.values(uniquePrograms);
                 renderVoteResults(programsArray);
             }
         });
@@ -1111,16 +1094,27 @@
         });
     }
 
-    // 渲染投票结果
+    // 渲染投票结果 - 已修复重复问题
     function renderVoteResults(programs) {
         const container = document.getElementById('vote-results');
         if (!container) return;
         
-        container.innerHTML = '';
+        // 去重处理
+        const uniquePrograms = [];
+        const seenIds = new Set();
+        
+        programs.forEach(program => {
+            if (program && program.id && !seenIds.has(program.id)) {
+                seenIds.add(program.id);
+                uniquePrograms.push(program);
+            }
+        });
         
         // 按票数排序
-        const sortedPrograms = [...programs].sort((a, b) => b.votes - a.votes);
+        const sortedPrograms = uniquePrograms.sort((a, b) => b.votes - a.votes);
         const maxVotes = Math.max(...sortedPrograms.map(p => p.votes), 1);
+        
+        container.innerHTML = '';
         
         sortedPrograms.forEach((program, index) => {
             const percentage = (program.votes / maxVotes) * 100;
@@ -1183,6 +1177,98 @@
             
             container.appendChild(programEl);
         });
+    }
+
+    // 初始化Firebase投票数据
+    async function initFirebaseVoteData() {
+        try {
+            // 初始化设置
+            const settingsSnapshot = await voteSettingsRef.once('value');
+            if (!settingsSnapshot.exists()) {
+                await voteSettingsRef.set({
+                    votesPerUser: 1,
+                    voteDuration: 2, // 分钟
+                    lastUpdate: Date.now()
+                });
+            }
+            
+            // 初始化节目数据
+            const snapshot = await programsRef.once('value');
+            if (!snapshot.exists()) {
+                const initPromises = defaultPrograms.map(program => {
+                    return programsRef.child(program.id).set({
+                        ...program,
+                        lastUpdate: Date.now()
+                    });
+                });
+                await Promise.all(initPromises);
+            }
+        } catch (error) {
+            console.error('初始化Firebase数据失败:', error);
+        }
+    }
+
+    // 更新投票控制UI - 修复时间显示问题
+    async function updateVoteControlUI(controlData) {
+        const title = document.querySelector('#vote-modal h2');
+        if (title) {
+            if (controlData.isActive) {
+                const remaining = Math.max(0, Math.floor((controlData.endTime - Date.now()) / 1000));
+                const minutes = Math.floor(remaining / 60);
+                const seconds = remaining % 60;
+                title.innerHTML = `📊 云端投票实时排行榜`;
+                
+                // 更新独立的时间显示
+                updateVoteTimeDisplay();
+            } else {
+                title.innerHTML = '📊 云端投票排行榜 <span style="color: #aaa; font-size: 18px;">(投票已结束)</span>';
+                document.getElementById('vote-time-display').innerHTML = '';
+            }
+        }
+    }
+
+    // 初始化Firebase投票系统 - 修复连接问题
+    async function initFirebaseVoteSystem() {
+        try {
+            // 检查Firebase SDK是否加载
+            if (typeof firebase === 'undefined') {
+                console.error('Firebase SDK 未加载');
+                throw new Error('Firebase SDK 未加载');
+            }
+            
+            // 初始化数据库引用
+            voteDb = firebase.database();
+            votesRef = voteDb.ref('votes');
+            programsRef = voteDb.ref('programs');
+            controlRef = voteDb.ref('vote_control');
+            voteSettingsRef = voteDb.ref('vote_settings');
+            
+            console.log('Firebase投票系统初始化成功');
+            
+            // 测试连接
+            const testRef = voteDb.ref('.info/connected');
+            testRef.on('value', (snapshot) => {
+                if (snapshot.val() === true) {
+                    console.log('Firebase连接成功');
+                } else {
+                    console.log('Firebase连接断开');
+                }
+            });
+            
+            await initFirebaseVoteData();
+            listenToVotes();
+            
+            // 绑定投票按钮事件
+            document.getElementById('vote-start-btn').addEventListener('click', startFirebaseVoting);
+            document.getElementById('vote-stop-btn').addEventListener('click', stopFirebaseVoting);
+            document.getElementById('vote-reset-btn').addEventListener('click', resetFirebaseVoting);
+            
+            console.log('Firebase投票系统功能初始化成功');
+            
+        } catch (error) {
+            console.error('Firebase投票系统初始化失败:', error);
+            // 不显示警告，避免影响用户体验
+        }
     }
 
     // 开始投票（使用Firebase）- 修复时间同步问题
@@ -1334,69 +1420,6 @@
         }
     }
 
-    // 更新投票控制UI - 修复时间显示问题
-    async function updateVoteControlUI(controlData) {
-        const title = document.querySelector('#vote-modal h2');
-        if (title) {
-            if (controlData.isActive) {
-                const remaining = Math.max(0, Math.floor((controlData.endTime - Date.now()) / 1000));
-                const minutes = Math.floor(remaining / 60);
-                const seconds = remaining % 60;
-                title.innerHTML = `📊 云端投票实时排行榜`;
-                
-                // 更新独立的时间显示
-                updateVoteTimeDisplay();
-            } else {
-                title.innerHTML = '📊 云端投票排行榜 <span style="color: #aaa; font-size: 18px;">(投票已结束)</span>';
-                document.getElementById('vote-time-display').innerHTML = '';
-            }
-        }
-    }
-
-    // 初始化Firebase投票系统 - 修复连接问题
-    async function initFirebaseVoteSystem() {
-        try {
-            // 检查Firebase SDK是否加载
-            if (typeof firebase === 'undefined') {
-                console.error('Firebase SDK 未加载');
-                throw new Error('Firebase SDK 未加载');
-            }
-            
-            // 初始化数据库引用
-            voteDb = firebase.database();
-            votesRef = voteDb.ref('votes');
-            programsRef = voteDb.ref('programs');
-            controlRef = voteDb.ref('vote_control');
-            voteSettingsRef = voteDb.ref('vote_settings');
-            
-            console.log('Firebase投票系统初始化成功');
-            
-            // 测试连接
-            const testRef = voteDb.ref('.info/connected');
-            testRef.on('value', (snapshot) => {
-                if (snapshot.val() === true) {
-                    console.log('Firebase连接成功');
-                } else {
-                    console.log('Firebase连接断开');
-                }
-            });
-            
-            await initFirebaseVoteData();
-            listenToVotes();
-            
-            // 绑定投票按钮事件
-            document.getElementById('vote-start-btn').addEventListener('click', startFirebaseVoting);
-            document.getElementById('vote-stop-btn').addEventListener('click', stopFirebaseVoting);
-            document.getElementById('vote-reset-btn').addEventListener('click', resetFirebaseVoting);
-            
-            console.log('Firebase投票系统功能初始化成功');
-            
-        } catch (error) {
-            console.error('Firebase投票系统初始化失败:', error);
-            // 不显示警告，避免影响用户体验
-        }
-    }
-
     // 打开投票面板
     function openVotePanel() {
         document.getElementById('vote-modal').style.display = 'flex';
@@ -1466,15 +1489,27 @@
             // 设置投票时长
             document.getElementById('vote-duration').value = settings.voteDuration || 2;
             
-            // 加载节目列表
+            // 加载节目列表 - 修复重复问题
             const programsSnapshot = await programsRef.once('value');
             const programsData = programsSnapshot.val() || {};
+            
+            // 去重处理
+            const uniquePrograms = {};
+            const seenIds = new Set();
+            
+            Object.keys(programsData).forEach(key => {
+                const program = programsData[key];
+                if (program && program.id && !seenIds.has(program.id)) {
+                    seenIds.add(program.id);
+                    uniquePrograms[key] = program;
+                }
+            });
             
             const programListContainer = document.getElementById('program-list-container');
             programListContainer.innerHTML = '';
             
-            Object.keys(programsData).forEach(programId => {
-                const program = programsData[programId];
+            Object.keys(uniquePrograms).forEach(programId => {
+                const program = uniquePrograms[programId];
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'program-list-item';
                 itemDiv.innerHTML = `
