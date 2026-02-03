@@ -1,5 +1,26 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js"></script>
+
+<script>
+  // 你的Firebase配置
+  const firebaseConfig = {
+  apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
+  authDomain: "annual-vote.firebaseapp.com",
+  databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "annual-vote",
+  storageBucket: "annual-vote.firebasestorage.app",
+  messagingSenderId: "733592758408",
+  appId: "1:733592758408:web:e5f5212a8392f298eb573d",
+  measurementId: "G-KDQ31YVGGX"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+</script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,6 +35,7 @@
     <script src="./xlsx.full.min.js"></script>
     <script src="./umd.js"></script>
     <script src="./confetti.min.js"></script>
+    <script src="server-check.js"></script>
 
     <style>
         /* === 核心变量 === */
@@ -1178,6 +1200,207 @@
             }
         }
     }
+// ==================== Firebase投票功能 ====================
+
+// Firebase数据库引用
+const db = firebase.database();
+const votesRef = db.ref('votes');
+const programsRef = db.ref('programs');
+const controlRef = db.ref('vote_control');
+
+// 初始化节目数据
+const initialPrograms = [
+    { id: 1, title: "开场舞蹈《未来之光》", votes: 0 },
+    { id: 2, title: "歌曲串烧《岁月如歌》", votes: 0 },
+    { id: 3, title: "小品《办公室的故事》", votes: 0 },
+    { id: 4, title: "魔术表演《梦幻之夜》", votes: 0 },
+    { id: 5, title: "乐器合奏《星空交响》", votes: 0 },
+    { id: 6, title: "创意走秀《时尚前沿》", votes: 0 },
+    { id: 7, title: "相声《职场那些事儿》", votes: 0 },
+    { id: 8, title: "合唱《明天会更好》", votes: 0 },
+    { id: 9, title: "舞蹈《古风雅韵》", votes: 0 },
+    { id: 10, title: "舞台剧《我们的故事》", votes: 0 }
+];
+
+// 初始化Firebase投票数据
+async function initFirebaseVoteData() {
+    const snapshot = await programsRef.once('value');
+    if (!snapshot.exists()) {
+        // 初始化节目数据
+        initialPrograms.forEach(program => {
+            programsRef.child(program.id).set({
+                ...program,
+                lastUpdate: Date.now()
+            });
+        });
+    }
+}
+
+// 监听投票数据变化
+function listenToVotes() {
+    programsRef.on('value', (snapshot) => {
+        const programsData = snapshot.val();
+        if (programsData) {
+            const programsArray = Object.values(programsData);
+            renderVoteResults(programsArray);
+        }
+    });
+    
+    controlRef.on('value', (snapshot) => {
+        const controlData = snapshot.val();
+        if (controlData) {
+            updateVoteControlUI(controlData);
+        }
+    });
+}
+
+// 渲染投票结果
+function renderVoteResults(programs) {
+    const container = document.getElementById('vote-results');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // 按票数排序
+    const sortedPrograms = [...programs].sort((a, b) => b.votes - a.votes);
+    const maxVotes = Math.max(...sortedPrograms.map(p => p.votes), 1);
+    
+    sortedPrograms.forEach((program, index) => {
+        const percentage = (program.votes / maxVotes) * 100;
+        const isTop = index === 0;
+        
+        const programEl = document.createElement('div');
+        programEl.className = 'vote-item';
+        programEl.style.cssText = `
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid ${isTop ? 'var(--neon-gold)' : 'var(--neon-blue)'};
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+        `;
+        
+        if (isTop) {
+            programEl.style.boxShadow = '0 0 30px rgba(255, 215, 0, 0.5)';
+            programEl.style.animation = 'pulse-gold 1s infinite alternate';
+        }
+        
+        programEl.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div style="font-size: 24px; font-weight: bold; color: ${isTop ? 'var(--neon-gold)' : '#fff'}; 
+                         width: 50px; height: 50px; background: rgba(0,0,0,0.7); 
+                         border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                         border: 2px solid ${isTop ? 'var(--neon-gold)' : 'var(--neon-blue)'};">
+                        ${index + 1}
+                    </div>
+                    <h3 style="margin: 0; font-size: 24px; color: ${isTop ? 'var(--neon-gold)' : '#fff'}; font-family: 'Orbitron', sans-serif;">
+                        ${program.title}
+                    </h3>
+                </div>
+                <div style="font-size: 32px; font-weight: bold; color: ${isTop ? 'var(--neon-gold)' : 'var(--neon-blue)'}; font-family: 'Rajdhani', sans-serif;">
+                    ${program.votes} <span style="font-size: 18px; color: #aaa;">票</span>
+                </div>
+            </div>
+            <div style="background: rgba(255,255,255,0.1); height: 30px; border-radius: 15px; overflow: hidden; position: relative;">
+                <div class="vote-progress" 
+                     style="height: 100%; background: ${isTop ? 
+                       'linear-gradient(90deg, #ffd700, #ff9500)' : 
+                       'linear-gradient(90deg, var(--neon-blue), var(--neon-purple))'}; 
+                     width: ${percentage}%; border-radius: 15px; 
+                     transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); 
+                     display: flex; align-items: center; padding-left: 15px; 
+                     font-weight: bold; color: #000; font-family: 'Orbitron', sans-serif;">
+                    ${percentage.toFixed(1)}%
+                </div>
+            </div>
+            ${isTop ? `<div style="text-align: center; margin-top: 10px; color: var(--neon-gold); 
+                font-weight: bold; font-size: 20px; font-family: 'Rajdhani', sans-serif;">
+                🏆 当前领先 🏆
+            </div>` : ''}
+        `;
+        
+        container.appendChild(programEl);
+    });
+}
+
+// 开始投票
+async function startFirebaseVoting() {
+    await controlRef.set({
+        isActive: true,
+        startTime: Date.now(),
+        endTime: Date.now() + 120000, // 2分钟后
+        lastUpdate: Date.now()
+    });
+    
+    alert('投票已开始！投票链接已通过云端同步。');
+}
+
+// 结束投票
+async function stopFirebaseVoting() {
+    await controlRef.update({
+        isActive: false,
+        endTime: Date.now(),
+        lastUpdate: Date.now()
+    });
+    
+    alert('投票已结束！');
+}
+
+// 重置投票
+async function resetFirebaseVoting() {
+    if (confirm('确定要重置所有投票数据吗？这将清除所有票数记录！')) {
+        // 重置节目票数
+        initialPrograms.forEach(async (program) => {
+            await programsRef.child(program.id).update({
+                votes: 0,
+                lastUpdate: Date.now()
+            });
+        });
+        
+        // 清空投票记录
+        await votesRef.remove();
+        
+        // 重置控制状态
+        await controlRef.set({
+            isActive: false,
+            lastUpdate: Date.now()
+        });
+        
+        alert('投票数据已重置！');
+    }
+}
+
+// 更新投票控制UI
+function updateVoteControlUI(controlData) {
+    const title = document.querySelector('#vote-modal h2');
+    if (title) {
+        if (controlData.isActive) {
+            const remaining = Math.max(0, Math.floor((controlData.endTime - Date.now()) / 1000));
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            title.innerHTML = `📊 云端投票实时排行榜 <span style="color: var(--neon-blue); font-size: 18px;">(剩余时间: ${minutes}:${seconds.toString().padStart(2, '0')})</span>`;
+        } else {
+            title.innerHTML = '📊 云端投票排行榜 <span style="color: #aaa; font-size: 18px;">(投票已结束)</span>';
+        }
+    }
+}
+
+// 初始化Firebase投票系统
+async function initFirebaseVoteSystem() {
+    try {
+        await initFirebaseVoteData();
+        listenToVotes();
+        console.log('Firebase投票系统初始化成功');
+    } catch (error) {
+        console.error('Firebase初始化失败:', error);
+        alert('云端投票系统初始化失败，请检查网络连接');
+    }
+}
+
+// 在主系统加载完成后初始化
+setTimeout(initFirebaseVoteSystem, 2000);
 </script>
 </body>
 </html>
