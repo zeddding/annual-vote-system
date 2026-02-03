@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>年会节目投票</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js"></script>
+    
     <style>
         :root {
             --neon-purple: #b900ff;
@@ -338,8 +343,26 @@
     </div>
 
     <script>
-        // 投票系统数据
-        const VOTE_DB_KEY = 'annual_vote_data';
+        // Firebase配置（与主系统相同）
+        const firebaseConfig = {
+            apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
+            authDomain: "annual-vote.firebaseapp.com",
+            databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "annual-vote",
+            storageBucket: "annual-vote.firebasestorage.app",
+            messagingSenderId: "733592758408",
+            appId: "1:733592758408:web:e5f5212a8392f298eb573d",
+            measurementId: "G-KDQ31YVGGX"
+        };
+
+        // 初始化Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const votesRef = db.ref('votes');
+        const programsRef = db.ref('programs');
+        const controlRef = db.ref('vote_control');
+
+        // 节目数据
         const programs = [
             { id: 1, title: "开场舞蹈《未来之光》", description: "科技感十足的现代舞蹈，展现青春活力", color: "#ff0055" },
             { id: 2, title: "歌曲串烧《岁月如歌》", description: "经典老歌新唱，唤起美好回忆", color: "#b900ff" },
@@ -353,157 +376,55 @@
             { id: 10, title: "舞台剧《我们的故事》", description: "公司发展历程改编，感人至深", color: "#00b8ff" }
         ];
 
-        let voteData = {
-            isActive: false,
-            timeRemaining: 120, // 2分钟，单位：秒
-            programs: programs.map(p => ({ ...p, votes: 0 })),
-            userVotes: [], // 存储用户已投票的节目ID
-            totalVotes: 0
-        };
-
-        let timerInterval = null;
+        // 全局变量
         let userId = null;
-        let voteUpdateInterval = null;
+        let userVotes = [];
+        let voteTimer = null;
+        let remainingTime = 120; // 2分钟，单位：秒
+
+        // 生成用户ID
+        function generateUserId() {
+            let id = localStorage.getItem('vote_user_id');
+            if (!id) {
+                id = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('vote_user_id', id);
+            }
+            return id;
+        }
 
         // 初始化
         function init() {
-            loadVoteData();
-            generateUserId();
-            renderPrograms();
-            updateUI();
-            
-            // 从主屏幕接收投票状态
-            window.addEventListener('storage', handleStorageEvent);
-            
-            // 开始监听主屏幕数据更新
-            startListeningForUpdates();
-            
-            console.log("投票页面初始化完成");
-        }
-
-        // 生成用户ID（简易版）
-        function generateUserId() {
-            if (!localStorage.getItem('vote_user_id')) {
-                userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('vote_user_id', userId);
-            } else {
-                userId = localStorage.getItem('vote_user_id');
-            }
+            userId = generateUserId();
             console.log("用户ID:", userId);
-        }
-
-        // 加载投票数据
-        function loadVoteData() {
-            const saved = localStorage.getItem(VOTE_DB_KEY);
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    voteData = { ...voteData, ...parsed };
-                    console.log("加载投票数据成功:", voteData);
-                } catch(e) {
-                    console.error("解析投票数据失败:", e);
-                    resetLocalVoteData();
-                }
-            }
+            
+            // 渲染节目列表
+            renderPrograms();
             
             // 加载用户投票记录
-            const userVotesKey = `${VOTE_DB_KEY}_${userId}`;
-            const userVotes = localStorage.getItem(userVotesKey);
-            if (userVotes) {
-                try {
-                    voteData.userVotes = JSON.parse(userVotes);
-                    console.log("加载用户投票记录:", voteData.userVotes);
-                } catch(e) {
-                    console.error("解析用户投票记录失败:", e);
-                    voteData.userVotes = [];
-                }
-            }
-        }
-
-        // 重置本地投票数据
-        function resetLocalVoteData() {
-            voteData = {
-                isActive: false,
-                timeRemaining: 120,
-                programs: programs.map(p => ({ ...p, votes: 0 })),
-                userVotes: [],
-                totalVotes: 0
-            };
-        }
-
-        // 保存投票数据到主屏幕
-        function saveVoteData() {
-            localStorage.setItem(VOTE_DB_KEY, JSON.stringify(voteData));
+            loadUserVotes();
             
-            // 保存用户投票记录
-            const userVotesKey = `${VOTE_DB_KEY}_${userId}`;
-            localStorage.setItem(userVotesKey, JSON.stringify(voteData.userVotes));
+            // 监听Firebase投票状态
+            listenToFirebase();
             
-            // 通知主屏幕投票数据已更新
-            localStorage.setItem('vote_updated', Date.now().toString());
-            console.log("投票数据已保存并通知主屏幕");
+            // 绑定重置按钮事件
+            document.getElementById('reset-vote-btn').addEventListener('click', resetUserVotes);
         }
 
-        // 处理存储事件（从主屏幕接收状态）
-        function handleStorageEvent(e) {
-            console.log("存储事件:", e.key, e.newValue);
-            
-            if (e.key === 'vote_control') {
-                try {
-                    const data = JSON.parse(e.newValue);
-                    console.log("收到投票控制指令:", data);
-                    
-                    if (data.action === 'start') {
-                        startVoting();
-                    } else if (data.action === 'stop') {
-                        stopVoting();
-                    } else if (data.action === 'reset') {
-                        resetVoting();
-                    }
-                } catch(err) {
-                    console.error("解析投票控制指令失败:", err);
-                }
-            } else if (e.key === VOTE_DB_KEY) {
-                // 主屏幕数据更新，重新加载
-                loadVoteData();
-                renderPrograms();
-                updateUI();
-            }
-        }
-
-        // 开始监听主屏幕数据更新
-        function startListeningForUpdates() {
-            // 每2秒检查一次主屏幕数据
-            if (voteUpdateInterval) clearInterval(voteUpdateInterval);
-            voteUpdateInterval = setInterval(() => {
-                loadVoteData();
-                renderPrograms();
-                updateUI();
-            }, 2000);
-        }
-
-        // 渲染节目卡片
+        // 渲染节目列表
         function renderPrograms() {
             const container = document.getElementById('programs-container');
             container.innerHTML = '';
             
-            voteData.programs.forEach(program => {
-                const isVoted = voteData.userVotes.includes(program.id);
-                
+            programs.forEach(program => {
                 const card = document.createElement('div');
-                card.className = `program-card ${isVoted ? 'voted' : ''}`;
+                card.className = 'program-card';
                 card.innerHTML = `
                     <div class="program-number">${program.id}</div>
                     <h3 class="program-title">${program.title}</h3>
                     <p class="program-desc">${program.description}</p>
-                    <button class="vote-btn ${isVoted ? 'voted' : ''}" 
-                            data-id="${program.id}" 
-                            ${!voteData.isActive || isVoted || voteData.userVotes.length >= 5 ? 'disabled' : ''}>
-                        ${isVoted ? '已投票 ✓' : '投票'}
-                    </button>
-                    <div class="votes-count">票数: <span id="votes-${program.id}" class="${program.votes > 0 ? 'progress-animation' : ''}">${program.votes}</span></div>
+                    <button class="vote-btn" data-id="${program.id}">投票</button>
+                    <div class="votes-count">票数: <span id="votes-${program.id}" class="votes-count-num">0</span></div>
                 `;
-                
                 container.appendChild(card);
             });
             
@@ -511,52 +432,269 @@
             document.querySelectorAll('.vote-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const programId = parseInt(this.getAttribute('data-id'));
-                    voteForProgram(programId);
+                    submitVote(programId);
                 });
             });
         }
 
-        // 为节目投票
-        function voteForProgram(programId) {
-            if (!voteData.isActive) {
-                alert('投票尚未开始！');
+        // 加载用户投票记录
+        async function loadUserVotes() {
+            try {
+                const snapshot = await votesRef.orderByChild('userId').equalTo(userId).once('value');
+                if (snapshot.exists()) {
+                    const votes = snapshot.val();
+                    userVotes = Object.values(votes).map(vote => vote.programId);
+                    updateUI();
+                } else {
+                    userVotes = [];
+                }
+            } catch (error) {
+                console.error('加载用户投票记录失败:', error);
+                userVotes = [];
+            }
+        }
+
+        // 监听Firebase投票状态
+        function listenToFirebase() {
+            // 监听投票控制状态
+            controlRef.on('value', (snapshot) => {
+                const controlData = snapshot.val();
+                if (controlData) {
+                    updateVoteStatus(controlData);
+                }
+            });
+            
+            // 监听节目票数变化
+            programsRef.on('value', (snapshot) => {
+                const programsData = snapshot.val();
+                if (programsData) {
+                    updateProgramVotes(programsData);
+                }
+            });
+        }
+
+        // 更新投票状态
+        function updateVoteStatus(controlData) {
+            const startBtn = document.getElementById('start-vote-btn');
+            const statusText = document.getElementById('status-text');
+            
+            if (controlData.isActive) {
+                startBtn.disabled = true;
+                startBtn.textContent = '投票进行中...';
+                statusText.textContent = '投票进行中，请为您喜爱的节目投票！';
+                statusText.style.color = 'var(--neon-blue)';
+                
+                // 开始倒计时
+                if (controlData.endTime) {
+                    startCountdown(controlData.endTime);
+                }
+            } else {
+                startBtn.disabled = true;
+                startBtn.textContent = '等待主屏幕开始投票';
+                statusText.textContent = '等待开始投票...';
+                statusText.style.color = 'var(--neon-gold)';
+                
+                // 停止倒计时
+                stopCountdown();
+            }
+        }
+
+        // 开始倒计时
+        function startCountdown(endTime) {
+            stopCountdown(); // 先停止已有的计时器
+            
+            function update() {
+                const now = Date.now();
+                remainingTime = Math.max(0, Math.floor((endTime - now) / 1000));
+                
+                const minutes = Math.floor(remainingTime / 60);
+                const seconds = remainingTime % 60;
+                document.getElementById('timer').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // 最后10秒闪烁效果
+                if (remainingTime <= 10) {
+                    document.getElementById('timer').style.color = 'var(--neon-pink)';
+                    document.getElementById('timer').style.animation = 'pulse 0.5s infinite';
+                } else {
+                    document.getElementById('timer').style.color = 'white';
+                    document.getElementById('timer').style.animation = '';
+                }
+                
+                if (remainingTime > 0) {
+                    voteTimer = setTimeout(update, 1000);
+                } else {
+                    // 倒计时结束
+                    document.getElementById('timer').textContent = '00:00';
+                    document.getElementById('timer').style.color = 'var(--neon-pink)';
+                }
+            }
+            
+            update(); // 立即执行一次
+        }
+
+        // 停止倒计时
+        function stopCountdown() {
+            if (voteTimer) {
+                clearTimeout(voteTimer);
+                voteTimer = null;
+            }
+            document.getElementById('timer').textContent = '02:00';
+            document.getElementById('timer').style.color = 'white';
+            document.getElementById('timer').style.animation = '';
+        }
+
+        // 更新节目票数
+        function updateProgramVotes(programsData) {
+            programs.forEach(program => {
+                const programData = programsData[program.id];
+                if (programData) {
+                    const voteCountElement = document.getElementById(`votes-${program.id}`);
+                    if (voteCountElement) {
+                        const currentVotes = voteCountElement.textContent;
+                        const newVotes = programData.votes || 0;
+                        if (parseInt(currentVotes) !== newVotes) {
+                            voteCountElement.textContent = newVotes;
+                            voteCountElement.classList.add('progress-animation');
+                            setTimeout(() => {
+                                voteCountElement.classList.remove('progress-animation');
+                            }, 500);
+                        }
+                    }
+                }
+            });
+        }
+
+        // 提交投票
+        async function submitVote(programId) {
+            // 检查投票是否进行中
+            const controlSnapshot = await controlRef.once('value');
+            const controlData = controlSnapshot.val();
+            
+            if (!controlData || !controlData.isActive) {
+                alert('投票尚未开始或已结束！');
                 return;
             }
             
-            if (voteData.userVotes.length >= 5) {
+            // 检查是否已投5票
+            if (userVotes.length >= 5) {
                 alert('您已用完所有投票次数！');
                 return;
             }
             
-            if (voteData.userVotes.includes(programId)) {
+            // 检查是否已经投过这个节目
+            if (userVotes.includes(programId)) {
                 alert('您已经为该节目投过票了！');
                 return;
             }
             
-            // 更新数据
-            const program = voteData.programs.find(p => p.id === programId);
-            if (program) {
-                program.votes++;
-                voteData.userVotes.push(programId);
-                voteData.totalVotes++;
+            try {
+                // 提交投票到Firebase
+                const voteData = {
+                    userId: userId,
+                    programId: programId,
+                    timestamp: Date.now(),
+                    userAgent: navigator.userAgent
+                };
                 
-                // 保存并更新UI
-                saveVoteData();
-                renderPrograms();
+                // 添加投票记录
+                await votesRef.push(voteData);
+                
+                // 更新节目票数
+                const programRef = programsRef.child(programId);
+                const programSnapshot = await programRef.once('value');
+                const currentVotes = programSnapshot.val().votes || 0;
+                
+                await programRef.update({
+                    votes: currentVotes + 1,
+                    lastUpdate: Date.now()
+                });
+                
+                // 更新本地记录
+                userVotes.push(programId);
+                
+                // 更新UI
                 updateUI();
+                
+                // 更新按钮状态
+                const votedBtn = document.querySelector(`.vote-btn[data-id="${programId}"]`);
+                if (votedBtn) {
+                    votedBtn.disabled = true;
+                    votedBtn.textContent = '已投票 ✓';
+                    votedBtn.classList.add('voted');
+                }
                 
                 // 播放投票成功音效
                 playVoteSound();
                 
-                // 添加投票成功动画
-                const voteBtn = document.querySelector(`.vote-btn[data-id="${programId}"]`);
-                if (voteBtn) {
-                    voteBtn.classList.add('voted');
-                }
-                
                 // 显示投票成功提示
-                showVoteSuccess(program.title);
+                showVoteSuccess(programs.find(p => p.id === programId).title);
+                
+                console.log('投票成功:', programId);
+                
+            } catch (error) {
+                console.error('投票失败:', error);
+                alert('投票失败，请重试！');
             }
+        }
+
+        // 更新UI
+        function updateUI() {
+            // 更新剩余票数
+            const votesRemaining = document.getElementById('votes-remaining');
+            votesRemaining.textContent = 5 - userVotes.length;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.vote-btn').forEach(btn => {
+                const programId = parseInt(btn.getAttribute('data-id'));
+                if (userVotes.includes(programId)) {
+                    btn.disabled = true;
+                    btn.textContent = '已投票 ✓';
+                    btn.classList.add('voted');
+                }
+            });
+        }
+
+        // 重置用户投票
+        async function resetUserVotes() {
+            if (confirm('确定要重置您的投票吗？这将清除您已投的所有票！')) {
+                try {
+                    // 从Firebase删除用户的投票记录
+                    const snapshot = await votesRef.orderByChild('userId').equalTo(userId).once('value');
+                    if (snapshot.exists()) {
+                        const updates = {};
+                        snapshot.forEach((childSnapshot) => {
+                            updates[childSnapshot.key] = null;
+                        });
+                        await votesRef.update(updates);
+                    }
+                    
+                    // 重置本地记录
+                    userVotes = [];
+                    
+                    // 重置UI
+                    updateUI();
+                    
+                    // 重置按钮状态
+                    document.querySelectorAll('.vote-btn').forEach(btn => {
+                        btn.disabled = false;
+                        btn.textContent = '投票';
+                        btn.classList.remove('voted');
+                    });
+                    
+                    alert('您的投票已重置！');
+                } catch (error) {
+                    console.error('重置投票失败:', error);
+                    alert('重置投票失败，请重试！');
+                }
+            }
+        }
+
+        // 播放投票音效
+        function playVoteSound() {
+            const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3');
+            audio.volume = 0.3;
+            audio.play().catch(e => console.log("音频播放失败:", e));
         }
 
         // 显示投票成功提示
@@ -568,318 +706,29 @@
             statusEl.style.color = 'var(--neon-blue)';
             
             setTimeout(() => {
-                statusEl.innerHTML = originalText;
-                statusEl.style.color = 'var(--neon-gold)';
+                const controlSnapshot = controlRef.once('value');
+                controlSnapshot.then(snapshot => {
+                    const controlData = snapshot.val();
+                    if (controlData && controlData.isActive) {
+                        statusEl.textContent = '投票进行中，请为您喜爱的节目投票！';
+                        statusEl.style.color = 'var(--neon-blue)';
+                    } else {
+                        statusEl.innerHTML = originalText;
+                        statusEl.style.color = 'var(--neon-gold)';
+                    }
+                });
             }, 2000);
         }
 
-        // 播放投票音效
-        function playVoteSound() {
-            const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3');
-            audio.volume = 0.3;
-            audio.play().catch(e => console.log("音频播放失败:", e));
-        }
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
 
-        // 开始投票
-        function startVoting() {
-            if (voteData.isActive) return;
-            
-            voteData.isActive = true;
-            voteData.timeRemaining = 120;
-            
-            // 启动定时器
-            timerInterval = setInterval(updateTimer, 1000);
-            
-            // 保存状态并更新UI
-            saveVoteData();
-            updateUI();
-            renderPrograms();
-            
-            // 通知主屏幕投票已开始
-            localStorage.setItem('vote_started', Date.now().toString());
-            
-            // 播放开始音效
-            const audio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-game-show-intro-music-687.mp3');
-            audio.volume = 0.5;
-            audio.play().catch(e => console.log("音频播放失败:", e));
-            
-            // 显示开始提示
-            alert('投票已开始！您有2分钟时间为喜爱的节目投票。');
-        }
-
-        // 停止投票
-        function stopVoting() {
-            voteData.isActive = false;
-            clearInterval(timerInterval);
-            
-            saveVoteData();
-            updateUI();
-            
-            // 通知主屏幕投票已结束
-            localStorage.setItem('vote_ended', Date.now().toString());
-            
-            // 显示结束提示
-            alert('投票已结束！感谢您的参与。');
-        }
-
-        // 重置个人投票
-        function resetVoting() {
-            if (confirm('确定要重置您的投票吗？这将清除您已投的所有票！')) {
-                // 从总票数中减去用户已投的票数
-                voteData.userVotes.forEach(programId => {
-                    const program = voteData.programs.find(p => p.id === programId);
-                    if (program && program.votes > 0) {
-                        program.votes--;
-                    }
-                });
-                
-                voteData.userVotes = [];
-                voteData.totalVotes = 0;
-                
-                // 清除用户投票记录
-                const userVotesKey = `${VOTE_DB_KEY}_${userId}`;
-                localStorage.removeItem(userVotesKey);
-                
-                saveVoteData();
-                renderPrograms();
-                updateUI();
-                
-                alert('您的投票已重置！');
-            }
-        }
-
-        // 更新计时器
-        function updateTimer() {
-            if (voteData.timeRemaining > 0) {
-                voteData.timeRemaining--;
-                
-                const minutes = Math.floor(voteData.timeRemaining / 60);
-                const seconds = voteData.timeRemaining % 60;
-                document.getElementById('timer').textContent = 
-                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                
-                // 最后10秒闪烁效果
-                if (voteData.timeRemaining <= 10) {
-                    document.getElementById('timer').style.color = 'var(--neon-pink)';
-                    document.getElementById('timer').style.animation = 'pulse 0.5s infinite';
-                }
-            } else {
-                // 时间到，停止投票
-                stopVoting();
-                alert('投票时间到！');
-            }
-        }
-
-        // 更新UI状态
-        function updateUI() {
-            const startBtn = document.getElementById('start-vote-btn');
-            const statusText = document.getElementById('status-text');
-            const votesRemaining = document.getElementById('votes-remaining');
-            
-            if (voteData.isActive) {
-                startBtn.disabled = true;
-                startBtn.textContent = '投票进行中...';
-                statusText.textContent = '投票进行中，请为您喜爱的节目投票！';
-                statusText.style.color = 'var(--neon-blue)';
-            } else {
-                startBtn.disabled = true; // 只能由主屏幕控制
-                startBtn.textContent = '等待主屏幕开始投票';
-                statusText.textContent = voteData.totalVotes > 0 ? 
-                    '投票已结束，感谢您的参与！' : '等待开始投票...';
-                statusText.style.color = voteData.totalVotes > 0 ? 'var(--neon-gold)' : 'var(--neon-blue)';
-            }
-            
-            votesRemaining.textContent = 5 - voteData.userVotes.length;
-            
-            // 更新倒计时显示
-            if (voteData.isActive && timerInterval) {
-                const minutes = Math.floor(voteData.timeRemaining / 60);
-                const seconds = voteData.timeRemaining % 60;
-                document.getElementById('timer').textContent = 
-                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            }
-        }
-
-        // 事件监听
-        document.getElementById('reset-vote-btn').addEventListener('click', resetVoting);
-
-        // 初始化应用
-        window.addEventListener('DOMContentLoaded', init);
-        
         // 页面可见性变化时重新加载数据
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
-                loadVoteData();
-                renderPrograms();
-                updateUI();
+                loadUserVotes();
             }
         });
-// 在vote.html中添加Firebase配置和投票逻辑
-const firebaseConfig = {
-    apiKey: "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    authDomain: "annual-vote-system.firebaseapp.com",
-    databaseURL: "https://annual-vote-system.firebaseio.com",
-    projectId: "annual-vote-system",
-    storageBucket: "annual-vote-system.appspot.com",
-    messagingSenderId: "1234567890",
-    appId: "1:1234567890:web:abc123def456ghi789jkl"
-};
-
-// 初始化Firebase
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-// 生成用户ID
-function generateUserId() {
-    let userId = localStorage.getItem('vote_user_id');
-    if (!userId) {
-        userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('vote_user_id', userId);
-    }
-    return userId;
-}
-
-// 检查用户是否已投票
-async function checkUserVotes(userId) {
-    const snapshot = await db.ref('votes').orderByChild('userId').equalTo(userId).once('value');
-    return snapshot.exists() ? Object.keys(snapshot.val()).length : 0;
-}
-
-// 提交投票
-async function submitVote(programId) {
-    const userId = generateUserId();
-    
-    // 检查用户是否已投5票
-    const userVoteCount = await checkUserVotes(userId);
-    if (userVoteCount >= 5) {
-        alert('您已用完所有投票次数！');
-        return false;
-    }
-    
-    // 检查是否已为该节目投票
-    const existingVote = await db.ref('votes')
-        .orderByChild('userId')
-        .equalTo(userId)
-        .once('value');
-    
-    if (existingVote.exists()) {
-        const votes = existingVote.val();
-        const alreadyVoted = Object.values(votes).some(vote => vote.programId === programId);
-        if (alreadyVoted) {
-            alert('您已经为该节目投过票了！');
-            return false;
-        }
-    }
-    
-    // 提交投票
-    const voteData = {
-        userId: userId,
-        programId: programId,
-        timestamp: Date.now(),
-        userAgent: navigator.userAgent
-    };
-    
-    try {
-        // 添加投票记录
-        await db.ref('votes').push(voteData);
-        
-        // 更新节目票数
-        const programRef = db.ref('programs').child(programId);
-        const programSnapshot = await programRef.once('value');
-        const currentVotes = programSnapshot.val().votes || 0;
-        
-        await programRef.update({
-            votes: currentVotes + 1,
-            lastUpdate: Date.now()
-        });
-        
-        return true;
-    } catch (error) {
-        console.error('投票失败:', error);
-        return false;
-    }
-}
-
-// 监听投票状态
-function listenToVoteStatus() {
-    db.ref('vote_control').on('value', (snapshot) => {
-        const controlData = snapshot.val();
-        if (controlData) {
-            updateVoteUI(controlData);
-        }
-    });
-}
-
-// 更新投票页面UI
-function updateVoteUI(controlData) {
-    const startBtn = document.getElementById('start-vote-btn');
-    const statusText = document.getElementById('status-text');
-    const timerElement = document.getElementById('timer');
-    
-    if (controlData.isActive) {
-        startBtn.disabled = true;
-        startBtn.textContent = '投票进行中...';
-        statusText.textContent = '投票进行中，请为您喜爱的节目投票！';
-        
-        // 更新倒计时
-        if (controlData.endTime) {
-            const updateTimer = () => {
-                const remaining = Math.max(0, Math.floor((controlData.endTime - Date.now()) / 1000));
-                const minutes = Math.floor(remaining / 60);
-                const seconds = remaining % 60;
-                timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                
-                if (remaining <= 10) {
-                    timerElement.style.color = 'var(--neon-pink)';
-                    timerElement.style.animation = 'pulse 0.5s infinite';
-                }
-                
-                if (remaining > 0) {
-                    setTimeout(updateTimer, 1000);
-                }
-            };
-            updateTimer();
-        }
-    } else {
-        startBtn.disabled = true;
-        startBtn.textContent = '等待主屏幕开始投票';
-        statusText.textContent = '等待开始投票...';
-        timerElement.textContent = '02:00';
-    }
-}
-
-// 初始化投票页面
-function initVotePage() {
-    const userId = generateUserId();
-    console.log('用户ID:', userId);
-    
-    listenToVoteStatus();
-    
-    // 为每个投票按钮添加事件
-    document.querySelectorAll('.vote-btn').forEach(btn => {
-        btn.addEventListener('click', async function() {
-            const programId = parseInt(this.getAttribute('data-id'));
-            const success = await submitVote(programId);
-            
-            if (success) {
-                // 更新UI
-                this.disabled = true;
-                this.textContent = '已投票 ✓';
-                this.classList.add('voted');
-                
-                // 更新剩余票数
-                const userVoteCount = await checkUserVotes(userId);
-                document.getElementById('votes-remaining').textContent = 5 - userVoteCount;
-                
-                // 播放音效
-                playVoteSound();
-            }
-        });
-    });
-}
-
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', initVotePage);
-</script>
+    </script>
 </body>
 </html>
