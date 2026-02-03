@@ -737,8 +737,9 @@
         let programsData = {};
         let programsListener = null;
         let controlListener = null;
-        let clientTimeOffset = 0; // 客户端时间偏移量
-        let lastControlData = null; // 缓存上一次的控制数据
+        let lastControlData = null;
+        let currentSessionId = null;
+        let lastVoteCheckTime = 0;
 
         // 更新加载状态
         function updateLoadingStatus(message, detail = '') {
@@ -762,7 +763,8 @@
                     navigator.platform,
                     !!navigator.doNotTrack,
                     screen.height,
-                    screen.width
+                    screen.width,
+                    new Date().getTime()
                 ];
                 return components.join('|');
             };
@@ -772,39 +774,75 @@
             return 'vote_device_' + hash;
         }
 
-        // 检查是否已投票 - 修复：只要localStorage有记录就认为已投票
-        function checkHasVoted() {
+        // 检查是否已投票 - 修复：检查会话ID是否匹配
+        async function checkHasVoted() {
             const voteKey = `annual_vote_${deviceId}`;
-            const voteData = localStorage.getItem(voteKey);
-            return !!voteData; // 只要有记录就认为已投票
+            const voteDataStr = localStorage.getItem(voteKey);
+            
+            if (!voteDataStr) {
+                return false;
+            }
+            
+            try {
+                const voteData = JSON.parse(voteDataStr);
+                
+                // 获取当前的会话ID
+                const controlSnapshot = await controlRef.once('value');
+                const controlData = controlSnapshot.val() || {};
+                const currentSessionId = controlData.sessionId;
+                
+                // 如果会话ID不匹配，清除本地记录
+                if (currentSessionId && voteData.sessionId !== currentSessionId) {
+                    console.log('会话ID不匹配，清除本地投票记录');
+                    localStorage.removeItem(voteKey);
+                    return false;
+                }
+                
+                // 如果投票时间超过24小时，也清除记录（防止永久记录）
+                const voteTime = voteData.timestamp || 0;
+                const now = Date.now();
+                if (now - voteTime > 24 * 60 * 60 * 1000) {
+                    console.log('投票记录超过24小时，清除本地记录');
+                    localStorage.removeItem(voteKey);
+                    return false;
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('检查投票记录时出错:', error);
+                localStorage.removeItem(voteKey);
+                return false;
+            }
         }
 
-        // 标记已投票 - 修复：只使用localStorage
+        // 标记已投票 - 修复：记录会话ID
         function markAsVoted(voteData) {
             const voteKey = `annual_vote_${deviceId}`;
-            // 保存投票数据到localStorage
-            localStorage.setItem(voteKey, JSON.stringify(voteData));
+            // 保存投票数据到localStorage，包括会话ID
+            localStorage.setItem(voteKey, JSON.stringify({
+                ...voteData,
+                sessionId: currentSessionId,
+                timestamp: Date.now()
+            }));
             hasVoted = true;
         }
 
-        // 获取服务器时间偏移量（估算）
-        async function getServerTimeOffset() {
-            try {
-                const startTime = Date.now();
-                const ref = db.ref('.info/serverTimeOffset');
-                const snapshot = await ref.once('value');
-                const offset = snapshot.val() || 0;
-                const serverTime = Date.now() + offset;
-                
-                // 计算网络延迟
-                const latency = Date.now() - startTime;
-                const adjustedOffset = offset - latency / 2;
-                
-                return adjustedOffset;
-            } catch (error) {
-                console.warn('获取服务器时间偏移量失败，使用本地时间:', error);
-                return 0;
+        // 清除所有用户的本地投票记录（重置投票时调用）
+        function clearAllLocalVotes() {
+            // 无法直接清除所有用户的localStorage，但可以清除当前设备的
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('annual_vote_')) {
+                    keysToRemove.push(key);
+                }
             }
+            
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key);
+            });
+            
+            console.log(`已清除 ${keysToRemove.length} 个本地投票记录`);
         }
 
         // 初始化应用
@@ -814,9 +852,6 @@
                 deviceId = getDeviceId();
                 console.log('设备ID:', deviceId);
                 
-                // 检查是否已投票
-                hasVoted = checkHasVoted();
-                
                 updateLoadingStatus('正在连接投票系统...');
                 
                 // 动态加载Firebase
@@ -824,10 +859,6 @@
                 
                 updateLoadingStatus('正在初始化投票系统...');
                 await initializeFirebase();
-                
-                // 获取服务器时间偏移量
-                clientTimeOffset = await getServerTimeOffset();
-                console.log('时间偏移量:', clientTimeOffset);
                 
                 // 监听投票状态变化
                 setupVoteListeners();
@@ -902,12 +933,20 @@
             }
             
             // 监听投票控制状态
-            controlListener = controlRef.on('value', (snapshot) => {
+            controlListener = controlRef.on('value', async (snapshot) => {
                 const controlData = snapshot.val();
                 
                 if (controlData) {
                     // 缓存控制数据
                     lastControlData = controlData;
+                    currentSessionId = controlData.sessionId;
+                    
+                    // 检查是否已投票（异步）
+                    const now = Date.now();
+                    if (now - lastVoteCheckTime > 5000) { // 每5秒检查一次
+                        lastVoteCheckTime = now;
+                        hasVoted = await checkHasVoted();
+                    }
                     
                     isVotingActive = controlData.isActive || false;
                     
@@ -923,8 +962,12 @@
                     } else {
                         // 投票未开始或已结束
                         if (controlData.endTime) {
-                            const serverTime = Date.now() + clientTimeOffset;
-                            if (serverTime > controlData.endTime) {
+                            // 使用主系统提供的服务器时间计算
+                            const serverTimeNow = controlData.serverTime ? 
+                                controlData.serverTime + (Date.now() - controlData.lastUpdate) : 
+                                Date.now();
+                            
+                            if (serverTimeNow > controlData.endTime) {
                                 // 投票已结束，显示结果
                                 loadFinalResults();
                             } else {
@@ -975,8 +1018,12 @@
             } else {
                 statusDot.classList.remove('active');
                 if (lastControlData && lastControlData.endTime) {
-                    const serverTime = Date.now() + clientTimeOffset;
-                    if (serverTime > lastControlData.endTime) {
+                    // 使用主系统提供的服务器时间计算
+                    const serverTimeNow = lastControlData.serverTime ? 
+                        lastControlData.serverTime + (Date.now() - lastControlData.lastUpdate) : 
+                        Date.now();
+                    
+                    if (serverTimeNow > lastControlData.endTime) {
                         statusText.textContent = '投票已结束';
                         subtitle.textContent = '投票结果';
                     } else {
@@ -1016,8 +1063,12 @@
             
             // 如果投票已结束，显示结果
             if (lastControlData && lastControlData.endTime) {
-                const serverTime = Date.now() + clientTimeOffset;
-                if (serverTime > lastControlData.endTime) {
+                // 使用主系统提供的服务器时间计算
+                const serverTimeNow = lastControlData.serverTime ? 
+                    lastControlData.serverTime + (Date.now() - lastControlData.lastUpdate) : 
+                    Date.now();
+                
+                if (serverTimeNow > lastControlData.endTime) {
                     loadFinalResults();
                 }
             }
@@ -1074,7 +1125,7 @@
             });
         }
 
-        // 更新时间显示 - 修复卡在57秒问题
+        // 更新时间显示 - 使用主系统提供的服务器时间
         function updateTimeDisplay() {
             const timeElement = document.getElementById('time-remaining');
             
@@ -1088,9 +1139,12 @@
                 return;
             }
             
-            // 使用服务器时间计算
-            const serverTime = Date.now() + clientTimeOffset;
-            const remaining = Math.max(0, lastControlData.endTime - serverTime);
+            // 使用主系统提供的服务器时间进行计算
+            const now = Date.now();
+            const serverTimeNow = lastControlData.serverTime ? 
+                lastControlData.serverTime + (now - lastControlData.lastUpdate) : 
+                now;
+            const remaining = Math.max(0, lastControlData.endTime - serverTimeNow);
             
             if (remaining <= 0) {
                 timeElement.textContent = '00:00';
@@ -1116,307 +1170,306 @@
             }
         }
 
-        // 加载节目数据（修复重复问题）
-        function loadPrograms() {
-            // 移除旧的监听器
-            if (programsListener) {
-                programsRef.off('value', programsListener);
+        // 加载节目数据
+        async function loadPrograms() {
+            try {
+                // 获取投票设置
+                const settingsSnapshot = await voteSettingsRef.once('value');
+                const settings = settingsSnapshot.val() || {};
+                maxVotesPerUser = settings.votesPerUser || 1;
+                
+                // 更新UI显示
+                document.getElementById('max-votes').textContent = maxVotesPerUser;
+                
+                // 获取节目数据
+                const snapshot = await programsRef.once('value');
+                programsData = snapshot.val() || {};
+                
+                // 渲染节目列表
+                renderPrograms();
+                
+                // 绑定提交按钮事件
+                document.getElementById('submit-votes-btn').addEventListener('click', submitVotes);
+                
+            } catch (error) {
+                console.error('加载节目数据失败:', error);
+                showError('无法加载节目列表，请刷新页面重试');
             }
-            
-            programsListener = programsRef.on('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    // 去重处理 - 确保没有重复ID的节目
-                    const uniquePrograms = {};
-                    const seenIds = new Set();
-                    
-                    Object.keys(data).forEach(key => {
-                        const program = data[key];
-                        if (program && program.id && !seenIds.has(program.id)) {
-                            seenIds.add(program.id);
-                            uniquePrograms[key] = program;
-                        }
-                    });
-                    
-                    programsData = uniquePrograms;
-                    renderPrograms(uniquePrograms);
-                    updateVotingInfo();
-                    
-                    // 获取投票设置
-                    voteSettingsRef.once('value').then((settingsSnapshot) => {
-                        const settings = settingsSnapshot.val() || {};
-                        maxVotesPerUser = settings.votesPerUser || 1;
-                        updateVotingInfo();
-                    });
-                }
-            });
         }
 
-        // 渲染节目列表（修复重复问题）
-        function renderPrograms(programsData) {
-            const container = document.getElementById('programs-container');
-            if (!container) return;
+        // 渲染节目列表
+        function renderPrograms() {
+            const programsContainer = document.getElementById('programs-container');
+            programsContainer.innerHTML = '';
             
-            container.innerHTML = '';
+            selectedPrograms.clear();
+            updateSelectedCount();
             
-            // 转换为数组并排序
-            const programsArray = Object.values(programsData)
-                .sort((a, b) => a.id - b.id);
+            // 去重处理 - 确保没有重复ID的节目
+            const uniquePrograms = {};
+            const seenIds = new Set();
             
-            // 检查是否有重复ID
-            const idSet = new Set();
-            const duplicateIds = [];
+            Object.keys(programsData).forEach(key => {
+                const program = programsData[key];
+                if (program && program.id && !seenIds.has(program.id)) {
+                    seenIds.add(program.id);
+                    uniquePrograms[key] = program;
+                }
+            });
+            
+            // 将节目转换为数组并排序
+            const programsArray = Object.values(uniquePrograms).sort((a, b) => a.id - b.id);
             
             programsArray.forEach(program => {
-                if (idSet.has(program.id)) {
-                    duplicateIds.push(program.id);
-                }
-                idSet.add(program.id);
-            });
-            
-            if (duplicateIds.length > 0) {
-                console.warn('发现重复节目ID:', duplicateIds);
-            }
-            
-            // 渲染节目卡片
-            programsArray.forEach((program) => {
-                const isSelected = selectedPrograms.has(program.id.toString());
+                const programCard = document.createElement('div');
+                programCard.className = 'program-card';
+                programCard.dataset.programId = program.id;
                 
-                const card = document.createElement('div');
-                card.className = `program-card ${isSelected ? 'selected' : ''}`;
-                card.dataset.id = program.id;
-                card.onclick = () => toggleProgramSelection(program.id);
-                
-                card.innerHTML = `
+                programCard.innerHTML = `
                     <div class="program-number">${program.id}</div>
                     <h3 class="program-title">${program.title}</h3>
-                    <p class="program-description">${program.description || ''}</p>
-                    <button class="vote-btn ${isSelected ? 'selected' : ''}" 
-                            onclick="event.stopPropagation(); toggleProgramSelection(${program.id})">
-                        ${isSelected ? '取消选择' : '选择'}
-                    </button>
-                    <div class="vote-count">当前票数: <strong>${program.votes || 0}</strong></div>
+                    <p class="program-description">${program.description || '暂无描述'}</p>
+                    <div class="vote-count">当前票数: <span class="highlight">${program.votes || 0}</span></div>
+                    <button class="vote-btn" data-program-id="${program.id}">投票</button>
                 `;
                 
-                container.appendChild(card);
+                // 添加点击事件
+                const voteBtn = programCard.querySelector('.vote-btn');
+                voteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleVote(program.id);
+                });
+                
+                programCard.addEventListener('click', () => {
+                    toggleVote(program.id);
+                });
+                
+                programsContainer.appendChild(programCard);
             });
         }
 
-        // 切换节目选择
-        function toggleProgramSelection(programId) {
-            if (!isVotingActive) {
-                showMessage('投票已结束', false);
-                return;
-            }
-            
-            if (hasVoted) {
-                showMessage('您已经投过票了', false);
-                return;
-            }
-            
-            const programIdStr = programId.toString();
-            
-            if (selectedPrograms.has(programIdStr)) {
+        // 切换投票选择
+        function toggleVote(programId) {
+            if (selectedPrograms.has(programId)) {
                 // 取消选择
-                selectedPrograms.delete(programIdStr);
+                selectedPrograms.delete(programId);
+                const programCard = document.querySelector(`.program-card[data-program-id="${programId}"]`);
+                const voteBtn = programCard.querySelector('.vote-btn');
+                
+                programCard.classList.remove('selected');
+                voteBtn.textContent = '投票';
+                voteBtn.classList.remove('selected');
             } else {
-                // 选择
+                // 检查是否达到最大选择数量
                 if (selectedPrograms.size >= maxVotesPerUser) {
-                    showMessage(`最多只能选择${maxVotesPerUser}个节目`, false);
+                    showMessage(`每人最多只能投${maxVotesPerUser}票`);
                     return;
                 }
-                selectedPrograms.add(programIdStr);
+                
+                // 选择
+                selectedPrograms.add(programId);
+                const programCard = document.querySelector(`.program-card[data-program-id="${programId}"]`);
+                const voteBtn = programCard.querySelector('.vote-btn');
+                
+                programCard.classList.add('selected');
+                voteBtn.textContent = '取消投票';
+                voteBtn.classList.add('selected');
             }
             
-            // 更新UI
-            const card = document.querySelector(`.program-card[data-id="${programId}"]`);
-            if (card) {
-                const button = card.querySelector('.vote-btn');
-                card.classList.toggle('selected');
-                button.classList.toggle('selected');
-                button.textContent = selectedPrograms.has(programIdStr) ? '取消选择' : '选择';
-            }
-            
-            updateVotingInfo();
+            updateSelectedCount();
         }
 
-        // 更新投票信息
-        function updateVotingInfo() {
-            const maxVotesElement = document.getElementById('max-votes');
-            const selectedCountElement = document.getElementById('selected-count');
+        // 更新已选择数量
+        function updateSelectedCount() {
+            document.getElementById('selected-count').textContent = selectedPrograms.size;
+            
+            // 更新提交按钮状态
             const submitBtn = document.getElementById('submit-votes-btn');
-            
-            if (maxVotesElement) {
-                maxVotesElement.textContent = maxVotesPerUser;
-            }
-            
-            if (selectedCountElement) {
-                selectedCountElement.textContent = selectedPrograms.size;
-            }
-            
-            if (submitBtn) {
-                if (selectedPrograms.size > 0 && isVotingActive && !hasVoted) {
-                    submitBtn.style.display = 'block';
-                    submitBtn.textContent = `提交投票 (${selectedPrograms.size}/${maxVotesPerUser})`;
-                    submitBtn.disabled = false;
-                } else {
-                    submitBtn.style.display = 'none';
-                    submitBtn.disabled = true;
-                }
+            if (selectedPrograms.size > 0) {
+                submitBtn.disabled = false;
+            } else {
+                submitBtn.disabled = true;
             }
         }
 
         // 提交投票
-        document.getElementById('submit-votes-btn')?.addEventListener('click', async function() {
-            if (!isVotingActive) {
-                showMessage('投票已结束', false);
-                return;
-            }
-            
-            if (hasVoted) {
-                showMessage('您已经投过票了', false);
-                return;
-            }
-            
-            if (selectedPrograms.size === 0) {
-                showMessage('请至少选择一个节目', false);
-                return;
-            }
-            
+        async function submitVotes() {
             try {
-                // 显示提交中状态
-                const submitBtn = document.getElementById('submit-votes-btn');
-                const originalText = submitBtn.textContent;
-                submitBtn.textContent = '提交中...';
-                submitBtn.disabled = true;
-                
-                // 检查是否已经投过票（双重验证）
-                const userVotesSnapshot = await votesRef.child(deviceId).once('value');
-                const existingVotes = userVotesSnapshot.val() || [];
-                
-                if (existingVotes.length > 0) {
-                    showMessage('您已经投过票了', false);
-                    submitBtn.textContent = originalText;
-                    submitBtn.disabled = false;
-                    markAsVoted(existingVotes);
-                    showConfirmationPage();
+                if (selectedPrograms.size === 0) {
+                    showMessage('请至少选择一个节目');
                     return;
                 }
                 
-                // 创建投票记录
-                const voteRecords = Array.from(selectedPrograms).map(programId => ({
-                    programId: parseInt(programId),
-                    timestamp: Date.now() + clientTimeOffset, // 使用服务器时间
-                    deviceId: deviceId
-                }));
+                if (selectedPrograms.size > maxVotesPerUser) {
+                    showMessage(`每人最多只能投${maxVotesPerUser}票`);
+                    return;
+                }
                 
-                // 保存投票记录到Firebase
-                await votesRef.child(deviceId).set(voteRecords);
+                if (!isVotingActive) {
+                    showMessage('投票尚未开始或已结束');
+                    return;
+                }
                 
-                // 更新节目票数
-                const updatePromises = voteRecords.map(async (vote) => {
-                    await programsRef.child(vote.programId).transaction(program => {
-                        if (program) {
-                            program.votes = (program.votes || 0) + 1;
-                            program.lastUpdate = Date.now() + clientTimeOffset;
+                // 检查是否已投票
+                if (hasVoted) {
+                    showMessage('您已经投过票了');
+                    return;
+                }
+                
+                // 禁用提交按钮，防止重复提交
+                const submitBtn = document.getElementById('submit-votes-btn');
+                submitBtn.disabled = true;
+                submitBtn.textContent = '提交中...';
+                
+                // 获取当前时间（使用主系统提供的服务器时间）
+                const now = Date.now();
+                const serverTimeNow = lastControlData.serverTime ? 
+                    lastControlData.serverTime + (now - lastControlData.lastUpdate) : 
+                    now;
+                
+                // 准备投票数据
+                const voteData = {
+                    deviceId: deviceId,
+                    selectedPrograms: Array.from(selectedPrograms),
+                    timestamp: serverTimeNow,
+                    sessionId: currentSessionId
+                };
+                
+                // 更新票数
+                const updatePromises = Array.from(selectedPrograms).map(async (programId) => {
+                    const programRef = programsRef.child(programId);
+                    // 使用事务确保数据一致性
+                    await programRef.transaction((currentData) => {
+                        if (currentData) {
+                            currentData.votes = (currentData.votes || 0) + 1;
+                            currentData.lastUpdate = serverTimeNow;
                         }
-                        return program;
+                        return currentData;
                     });
                 });
                 
+                // 等待所有更新完成
                 await Promise.all(updatePromises);
                 
-                // 标记为已投票
-                markAsVoted(voteRecords);
+                // 保存投票记录到本地
+                markAsVoted(voteData);
+                
+                // 保存投票记录到Firebase（可选，用于统计）
+                try {
+                    await votesRef.child(deviceId).set(voteData);
+                } catch (error) {
+                    console.warn('保存投票记录到云端失败:', error);
+                    // 不阻止用户投票成功
+                }
                 
                 // 显示成功消息
                 showMessage('投票成功！', true);
                 
                 // 显示确认页面
-                setTimeout(() => {
-                    showConfirmationPage();
-                }, 1500);
+                showConfirmationPage();
                 
             } catch (error) {
-                console.error('投票失败:', error);
-                showMessage('投票失败，请重试', false);
+                console.error('提交投票失败:', error);
+                showMessage('投票提交失败，请重试');
                 
+                // 重新启用提交按钮
                 const submitBtn = document.getElementById('submit-votes-btn');
-                submitBtn.textContent = '提交投票';
                 submitBtn.disabled = false;
+                submitBtn.textContent = '提交投票';
             }
-        });
+        }
 
-        // 渲染结果
-        function renderResults(programsData) {
-            const container = document.getElementById('results-container');
-            if (!container) return;
+        // 渲染投票结果
+        function renderResults(programs) {
+            const resultsContainer = document.getElementById('results-container');
+            resultsContainer.innerHTML = '';
+            
+            // 去重处理
+            const uniquePrograms = {};
+            const seenIds = new Set();
+            
+            Object.keys(programs).forEach(key => {
+                const program = programs[key];
+                if (program && program.id && !seenIds.has(program.id)) {
+                    seenIds.add(program.id);
+                    uniquePrograms[key] = program;
+                }
+            });
             
             // 转换为数组并排序
-            const resultsArray = Object.values(programsData)
-                .map(program => ({
-                    id: program.id,
-                    title: program.title,
-                    votes: program.votes || 0
-                }))
-                .sort((a, b) => b.votes - a.votes);
+            const programsArray = Object.values(uniquePrograms);
+            const sortedPrograms = programsArray.sort((a, b) => (b.votes || 0) - (a.votes || 0));
             
             // 计算总票数
-            const totalVotes = resultsArray.reduce((sum, program) => sum + program.votes, 0);
+            const totalVotes = sortedPrograms.reduce((sum, program) => sum + (program.votes || 0), 0);
             
-            container.innerHTML = '';
-            
-            resultsArray.forEach((program, index) => {
-                const percentage = totalVotes > 0 ? (program.votes / totalVotes * 100).toFixed(1) : 0;
-                const isTop3 = index < 3;
+            sortedPrograms.forEach((program, index) => {
+                const votes = program.votes || 0;
+                const percentage = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
                 
                 const resultItem = document.createElement('div');
-                resultItem.className = `result-item ${isTop3 ? 'top-3' : ''}`;
+                resultItem.className = `result-item ${index < 3 ? 'top-3' : ''}`;
                 
                 resultItem.innerHTML = `
                     <div class="result-rank">${index + 1}</div>
                     <div class="result-content">
                         <div class="result-title">${program.title}</div>
-                        <div class="result-votes">${program.votes} 票 (${percentage}%)</div>
+                        <div class="result-votes">${votes} 票</div>
                         <div class="result-bar">
                             <div class="result-fill" style="width: ${percentage}%"></div>
-                            <div class="result-percentage">${percentage}%</div>
+                            <div class="result-percentage">${percentage.toFixed(1)}%</div>
                         </div>
                     </div>
                 `;
                 
-                container.appendChild(resultItem);
+                resultsContainer.appendChild(resultItem);
             });
+            
+            // 如果没有节目数据，显示提示
+            if (sortedPrograms.length === 0) {
+                resultsContainer.innerHTML = '<div style="text-align: center; padding: 30px; color: #aaa;">暂无投票数据</div>';
+            }
         }
 
         // 显示消息
-        function showMessage(message, isSuccess) {
-            // 创建消息元素
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'success-message';
-            messageDiv.textContent = message;
-            messageDiv.style.background = isSuccess ? 
-                'rgba(46, 213, 115, 0.9)' : 'rgba(255, 107, 107, 0.9)';
+        function showMessage(message, isSuccess = false) {
+            // 移除现有的消息
+            const existingMessage = document.querySelector('.success-message');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
             
-            document.body.appendChild(messageDiv);
-            
-            // 3秒后自动移除
-            setTimeout(() => {
-                if (messageDiv.parentNode) {
-                    messageDiv.parentNode.removeChild(messageDiv);
-                }
-            }, 3000);
+            if (isSuccess) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'success-message';
+                messageDiv.textContent = message;
+                document.body.appendChild(messageDiv);
+                
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        messageDiv.remove();
+                    }
+                }, 3000);
+            } else {
+                alert(message);
+            }
         }
 
         // 显示错误
         function showError(message) {
-            const errorElement = document.getElementById('error-message');
-            if (errorElement) {
-                errorElement.textContent = message;
-                errorElement.style.display = 'block';
-            }
-            
+            hideAllContainers();
+            document.getElementById('error-message').style.display = 'block';
             document.getElementById('loading').style.display = 'none';
+            
+            const errorDiv = document.getElementById('error-message');
+            if (errorDiv) {
+                const originalContent = errorDiv.innerHTML;
+                errorDiv.innerHTML = `
+                    <div style="margin-bottom: 10px;">${message}</div>
+                    ${originalContent}
+                `;
+            }
         }
     </script>
 </body>
