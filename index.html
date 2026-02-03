@@ -1,13 +1,33 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+<!-- ✅ 关键修复1：使用兼容的 Firebase SDK 8.10.0 -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<script>
+  // ✅ 你的Firebase配置（保持不变）
+  const firebaseConfig = {
+    apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
+    authDomain: "annual-vote.firebaseapp.com",
+    databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "annual-vote",
+    storageBucket: "annual-vote.firebasestorage.app",
+    messagingSenderId: "733592758408",
+    appId: "1:733592758408:web:e5f5212a8392f298eb573d",
+    measurementId: "G-KDQ31YVGGX"
+  };
+
+  // 初始化Firebase
+  if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+  }
+  // ✅ 关键修复2：确保数据库引用在函数外部可访问
+  const db = firebase.database();
+</script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D年会抽奖系统 - 本地极速版</title>
-    
-    <!-- Firebase SDK 使用兼容版本 -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@700&display=swap" rel="stylesheet">
@@ -398,6 +418,7 @@
         </div>
     </div>
 </div>
+</body>
 
 <script>
     // 脚本开始
@@ -1068,24 +1089,6 @@
                 console.error('Firebase SDK 未加载');
                 throw new Error('Firebase SDK 未加载');
             }
-            
-            // Firebase配置
-            const firebaseConfig = {
-                apiKey: "AIzaSyDjZVXYj69RmxlXceo8nWfvb19dPiMCQIY",
-                authDomain: "annual-vote.firebaseapp.com",
-                databaseURL: "https://annual-vote-default-rtdb.asia-southeast1.firebasedatabase.app",
-                projectId: "annual-vote",
-                storageBucket: "annual-vote.firebasestorage.app",
-                messagingSenderId: "733592758408",
-                appId: "1:733592758408:web:e5f5212a8392f298eb573d",
-                measurementId: "G-KDQ31YVGGX"
-            };
-            
-            // 初始化Firebase
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-            }
-            
             // 初始化数据库引用
             db = firebase.database();
             votesRef = db.ref('votes');
