@@ -343,6 +343,44 @@
             color: var(--neon-blue);
             text-shadow: 0 0 10px var(--neon-blue);
         }
+        
+        /* 批次选择样式 */
+        .batch-selector {
+            display: flex;
+            gap: 15px;
+            margin-left: 20px;
+            align-items: center;
+        }
+        
+        .batch-selector label {
+            color: var(--neon-blue);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            white-space: nowrap;
+        }
+        
+        .batch-selector select {
+            font-size: 16px;
+            padding: 8px 15px;
+            margin: 0;
+        }
+        
+        /* 批次标记样式 */
+        .batch-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: var(--neon-purple);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 2;
+        }
+        
+        .batch-1 { background: var(--neon-blue); }
+        .batch-2 { background: var(--neon-purple); }
     </style>
 </head>
 <body>
@@ -380,6 +418,14 @@
 
     <div class="control-bar">
         <select id="prize-select" onchange="checkPrizeStatus()"></select>
+        <!-- 添加批次选择器（仅对三等奖显示） -->
+        <div id="batch-selector" class="batch-selector" style="display: none;">
+            <label>批次选择:</label>
+            <select id="batch-select">
+                <option value="1">第一批（10人）</option>
+                <option value="2">第二批（10人）</option>
+            </select>
+        </div>
         <button id="toggle-btn" class="btn-main btn-start" onclick="toggleLottery()">START ENGINE ▶</button>
     </div>
 
@@ -581,7 +627,7 @@
     // 脚本开始
     const DB_KEY = 'lottery_db_v15_speedgod_fix';
     const PRIZE_CONFIG = {
-        3: { name: "三等奖", count: 20 },
+        3: { name: "三等奖", count: 20, batchCount: 2, batchSize: 10 }, // 修改：三等奖分2批，每批10人
         2: { name: "二等奖", count: 12 },
         1: { name: "一等奖", count: 5 },
         0: { name: "特等奖", count: 2 } 
@@ -690,7 +736,26 @@
             opt.innerText = `${PRIZE_CONFIG[k].name}`;
             select.appendChild(opt);
         });
+        
+        // 添加批次选择变化监听
+        document.getElementById('batch-select').addEventListener('change', checkPrizeStatus);
+        document.getElementById('prize-select').addEventListener('change', onPrizeSelectChange);
+        
+        onPrizeSelectChange(); // 初始化时检查显示
         checkPrizeStatus(); 
+    }
+    
+    // 当奖项选择变化时
+    function onPrizeSelectChange() {
+        const type = document.getElementById('prize-select').value;
+        const batchSelector = document.getElementById('batch-selector');
+        
+        // 仅当选择三等奖时显示批次选择器
+        if (type == 3) {
+            batchSelector.style.display = 'flex';
+        } else {
+            batchSelector.style.display = 'none';
+        }
     }
 
     function reloadCanvas() {
@@ -827,6 +892,20 @@
             const alreadyDrawn = (prizeHistory[type] || []).length;
             const pool = getLeftPool();
 
+            // 检查是否有批次限制（仅对三等奖）
+            let batchDrawn = 0;
+            if (type == 3) {
+                const batchNumber = parseInt(document.getElementById('batch-select').value);
+                batchDrawn = getBatchDrawnCount(type, batchNumber);
+                
+                // 检查当前批次是否已抽满
+                if (batchDrawn >= (config.batchSize || config.count)) {
+                    alert(`当前批次已抽取${batchDrawn}人，已满${config.batchSize}人，请选择其他批次或奖项！`);
+                    return;
+                }
+            }
+            
+            // 检查是否已抽完
             if (alreadyDrawn >= config.count) { alert("本轮已结束"); return; }
             if (pool.length === 0) { alert("奖池已空"); return; }
 
@@ -869,6 +948,21 @@
             batchDraw();
         }
     }
+    
+    // 获取指定批次的已抽取人数
+    function getBatchDrawnCount(type, batchNumber) {
+        if (!prizeHistory[type]) return 0;
+        
+        // 如果是三等奖且有批次信息
+        const winners = prizeHistory[type];
+        if (type == 3) {
+            // 计算批次已抽取人数
+            const batchWinners = winners.filter(w => w.batch === batchNumber);
+            return batchWinners.length;
+        }
+        
+        return winners.length;
+    }
 
     async function batchDraw() {
         const type = document.getElementById('prize-select').value;
@@ -877,7 +971,23 @@
         const needed = config.count - currentHistory.length; 
         
         let pool = getLeftPool();
-        const countToDraw = Math.min(needed, pool.length);
+        let countToDraw = Math.min(needed, pool.length);
+        
+        // 特殊处理：三等奖分批次抽取
+        if (type == 3 && config.batchSize) {
+            const batchNumber = parseInt(document.getElementById('batch-select').value);
+            const batchDrawn = getBatchDrawnCount(type, batchNumber);
+            const batchRemaining = config.batchSize - batchDrawn;
+            
+            // 不能超过批次剩余人数
+            countToDraw = Math.min(countToDraw, batchRemaining);
+            
+            // 如果当前批次已满，提示用户
+            if (batchRemaining <= 0) {
+                alert(`当前批次已抽取${batchDrawn}人，已满${config.batchSize}人，请选择其他批次！`);
+                return;
+            }
+        }
         
         if (countToDraw <= 0) return;
 
@@ -889,14 +999,32 @@
         }
 
         if (!prizeHistory[type]) prizeHistory[type] = [];
-        prizeHistory[type].push(...winners);
+        
+        // 为三等奖添加批次信息
+        if (type == 3) {
+            const batchNumber = parseInt(document.getElementById('batch-select').value);
+            winners.forEach(winner => {
+                winner.batch = batchNumber;
+                prizeHistory[type].push(winner);
+            });
+        } else {
+            prizeHistory[type].push(...winners);
+        }
 
         const dbData = (await idbKeyval.get(DB_KEY)) || {};
         dbData.history = prizeHistory;
         await idbKeyval.set(DB_KEY, dbData);
 
         const isGrand = (type == 0); 
-        showWinnersModal(config.name, winners, isGrand);
+        
+        // 显示批次信息
+        let displayTitle = config.name;
+        if (type == 3) {
+            const batchNumber = parseInt(document.getElementById('batch-select').value);
+            displayTitle = `${config.name}（第${batchNumber}批）`;
+        }
+        
+        showWinnersModal(displayTitle, winners, isGrand, type);
         checkPrizeStatus();
         
         setTimeout(() => {
@@ -905,7 +1033,7 @@
         }, 1000);
     }
 
-    function showWinnersModal(title, winners, isGrand) {
+    function showWinnersModal(title, winners, isGrand, type) {
         const modal = document.getElementById('winner-modal');
         const panel = modal.querySelector('.modal-panel');
         const grid = document.getElementById('win-grid');
@@ -926,8 +1054,19 @@
         grid.innerHTML = '';
         winners.forEach((w, i) => {
             const div = document.createElement('div');
-            div.className = 'winner-item'; 
-            div.innerHTML = `<img src="${w.img}" onerror="this.src='${generateAvatar(w.name)}'"><span>${w.name}</span>`;
+            div.className = 'winner-item';
+            
+            // 如果是三等奖且有批次信息，添加批次标记
+            let batchBadge = '';
+            if (type == 3 && w.batch) {
+                batchBadge = `<div class="batch-badge batch-${w.batch}">第${w.batch}批</div>`;
+            }
+            
+            div.innerHTML = `
+                ${batchBadge}
+                <img src="${w.img}" onerror="this.src='${generateAvatar(w.name)}'">
+                <span>${w.name}</span>
+            `;
             grid.appendChild(div);
         });
 
@@ -998,24 +1137,67 @@
     function checkPrizeStatus() {
         const select = document.getElementById('prize-select');
         const btn = document.getElementById('toggle-btn');
+        const type = select.value;
+        const config = PRIZE_CONFIG[type];
         const options = select.options;
+        
         for (let i = 0; i < options.length; i++) {
-            const type = options[i].value;
-            const config = PRIZE_CONFIG[type];
-            const drawn = (prizeHistory[type] || []).length;
-            if (drawn >= config.count) {
-                options[i].innerText = `[已完] ${config.name}`;
+            const optType = options[i].value;
+            const optConfig = PRIZE_CONFIG[optType];
+            const drawn = (prizeHistory[optType] || []).length;
+            
+            // 特殊处理三等奖的显示
+            if (optType == 3 && optConfig.batchSize) {
+                // 计算每个批次的抽取情况
+                const batch1Drawn = getBatchDrawnCount(optType, 1);
+                const batch2Drawn = getBatchDrawnCount(optType, 2);
+                const batch1Remaining = Math.max(0, optConfig.batchSize - batch1Drawn);
+                const batch2Remaining = Math.max(0, optConfig.batchSize - batch2Drawn);
+                
+                if (drawn >= optConfig.count) {
+                    options[i].innerText = `[已完] ${optConfig.name}`;
+                } else {
+                    options[i].innerText = `${optConfig.name} [批1剩${batch1Remaining}/批2剩${batch2Remaining}]`;
+                }
             } else {
-                options[i].innerText = `${config.name} [剩${config.count - drawn}]`;
+                if (drawn >= optConfig.count) {
+                    options[i].innerText = `[已完] ${optConfig.name}`;
+                } else {
+                    options[i].innerText = `${optConfig.name} [剩${optConfig.count - drawn}]`;
+                }
             }
         }
-        const currentType = select.value;
-        const currentDrawn = (prizeHistory[currentType] || []).length;
-        if(currentDrawn >= PRIZE_CONFIG[currentType].count) {
-            btn.innerText = "本轮已完结"; btn.disabled = true;
+        
+        const currentDrawn = (prizeHistory[type] || []).length;
+        let btnText = "START ENGINE ▶";
+        let btnDisabled = false;
+        
+        // 特殊处理三等奖
+        if (type == 3 && config.batchSize) {
+            const batchNumber = parseInt(document.getElementById('batch-select').value);
+            const batchDrawn = getBatchDrawnCount(type, batchNumber);
+            const batchRemaining = config.batchSize - batchDrawn;
+            
+            if (batchRemaining <= 0) {
+                btnText = "当前批次已满";
+                btnDisabled = true;
+            } else if (currentDrawn >= config.count) {
+                btnText = "本轮已完结";
+                btnDisabled = true;
+            } else {
+                btnText = `抽取第${batchNumber}批（剩${batchRemaining}人）`;
+                btnDisabled = false;
+            }
+        } else if (currentDrawn >= config.count) {
+            btnText = "本轮已完结";
+            btnDisabled = true;
         } else {
-            btn.innerText = "START ENGINE ▶"; btn.disabled = false;
+            btnText = "START ENGINE ▶";
+            btnDisabled = false;
         }
+        
+        btn.innerText = btnText;
+        btn.disabled = btnDisabled;
     }
 
     function openRoster() {
@@ -1042,22 +1224,46 @@
             const history = prizeHistory[type] || [];
             const config = PRIZE_CONFIG[type];
             if (history.length === 0) return;
-            const li = document.createElement('li');
-            li.className = 'history-item';
-            li.onclick = () => showWinnersModal(config.name, history, type==0);
-            let avatars = history.slice(0, 10).map(h => `<img src="${h.img}" onerror="this.src='${generateAvatar(h.name)}'">`).join('');
-            if(history.length > 10) avatars += `<span style="font-size:12px; color:#aaa; align-self:center;">+${history.length-10}</span>`;
-            li.innerHTML = `
-                <div class="history-left">
-                    <span class="history-name" style="font-size:20px; color:var(--neon-gold); font-family:'Orbitron'">${config.name}</span>
-                    <span class="history-count" style="font-size:12px; color:#aaa;">共 ${history.length} 人</span>
-                </div>
-                <div class="history-avatars" style="display:flex; gap:5px;">${avatars}</div>
-            `;
-            list.appendChild(li);
+            
+            // 特殊处理三等奖的显示（按批次分组）
+            if (type == 3 && config.batchSize) {
+                // 按批次分组显示
+                const batch1Winners = history.filter(w => w.batch === 1);
+                const batch2Winners = history.filter(w => w.batch === 2);
+                
+                if (batch1Winners.length > 0) {
+                    const li = createHistoryItem(`${config.name}（第一批）`, batch1Winners, type);
+                    list.appendChild(li);
+                }
+                
+                if (batch2Winners.length > 0) {
+                    const li = createHistoryItem(`${config.name}（第二批）`, batch2Winners, type);
+                    list.appendChild(li);
+                }
+            } else {
+                const li = createHistoryItem(config.name, history, type);
+                list.appendChild(li);
+            }
         });
+        
         if(list.innerHTML === '') list.innerHTML = '<div style="text-align:center; padding:30px; color:#666;">暂无中奖数据</div>';
         document.getElementById('history-modal').style.display = 'flex';
+    }
+    
+    function createHistoryItem(title, winners, type) {
+        const li = document.createElement('li');
+        li.className = 'history-item';
+        li.onclick = () => showWinnersModal(title, winners, type==0, type);
+        let avatars = winners.slice(0, 10).map(h => `<img src="${h.img}" onerror="this.src='${generateAvatar(h.name)}'">`).join('');
+        if(winners.length > 10) avatars += `<span style="font-size:12px; color:#aaa; align-self:center;">+${winners.length-10}</span>`;
+        li.innerHTML = `
+            <div class="history-left">
+                <span class="history-name" style="font-size:20px; color:var(--neon-gold); font-family:'Orbitron'">${title}</span>
+                <span class="history-count" style="font-size:12px; color:#aaa;">共 ${winners.length} 人</span>
+            </div>
+            <div class="history-avatars" style="display:flex; gap:5px;">${avatars}</div>
+        `;
+        return li;
     }
 
     async function resetSystem() {
