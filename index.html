@@ -422,8 +422,8 @@
         <div id="batch-selector" class="batch-selector" style="display: none;">
             <label>批次选择:</label>
             <select id="batch-select">
-                <option value="1">第一批（10人）</option>
-                <option value="2">第二批（10人）</option>
+                <option value="1">第一批</option>
+                <option value="2">第二批</option>
             </select>
         </div>
         <button id="toggle-btn" class="btn-main btn-start" onclick="toggleLottery()">START ENGINE ▶</button>
@@ -627,8 +627,8 @@
     // 脚本开始
     const DB_KEY = 'lottery_db_v15_speedgod_fix';
     const PRIZE_CONFIG = {
-        3: { name: "三等奖", count: 20, batchCount: 2, batchSize: 10 }, // 修改：三等奖分2批，每批10人
-        2: { name: "二等奖", count: 12 },
+        3: { name: "三等奖", count: 20, batchCount: 2, batchSize: 10 }, // 三等奖分2批，每批10人
+        2: { name: "二等奖", count: 12, batchCount: 2, batchSize: 6 },  // 二等奖分2批，每批6人
         1: { name: "一等奖", count: 5 },
         0: { name: "特等奖", count: 2 } 
     };
@@ -750,11 +750,34 @@
         const type = document.getElementById('prize-select').value;
         const batchSelector = document.getElementById('batch-selector');
         
-        // 仅当选择三等奖时显示批次选择器
-        if (type == 3) {
+        // 当选择三等奖或二等奖时显示批次选择器
+        if (type == 3 || type == 2) {
             batchSelector.style.display = 'flex';
+            // 更新批次选择器的选项
+            updateBatchSelectOptions(type);
         } else {
             batchSelector.style.display = 'none';
+        }
+    }
+    
+    // 更新批次选择器的选项
+    function updateBatchSelectOptions(type) {
+        const batchSelect = document.getElementById('batch-select');
+        const config = PRIZE_CONFIG[type];
+        
+        // 清空现有选项
+        batchSelect.innerHTML = '';
+        
+        // 根据奖项配置添加选项
+        for (let i = 1; i <= config.batchCount; i++) {
+            const option = document.createElement('option');
+            option.value = i;
+            if (type == 3) {
+                option.text = `第${i}批（${config.batchSize}人）`;
+            } else if (type == 2) {
+                option.text = `第${i}轮（${config.batchSize}人）`;
+            }
+            batchSelect.appendChild(option);
         }
     }
 
@@ -892,15 +915,16 @@
             const alreadyDrawn = (prizeHistory[type] || []).length;
             const pool = getLeftPool();
 
-            // 检查是否有批次限制（仅对三等奖）
+            // 检查是否有批次限制（对二等奖和三等奖）
             let batchDrawn = 0;
-            if (type == 3) {
+            if (type == 3 || type == 2) {
                 const batchNumber = parseInt(document.getElementById('batch-select').value);
                 batchDrawn = getBatchDrawnCount(type, batchNumber);
                 
                 // 检查当前批次是否已抽满
                 if (batchDrawn >= (config.batchSize || config.count)) {
-                    alert(`当前批次已抽取${batchDrawn}人，已满${config.batchSize}人，请选择其他批次或奖项！`);
+                    const batchTerm = type == 3 ? "批" : "轮";
+                    alert(`当前第${batchNumber}${batchTerm}已抽取${batchDrawn}人，已满${config.batchSize}人，请选择其他${batchTerm}次或奖项！`);
                     return;
                 }
             }
@@ -953,15 +977,15 @@
     function getBatchDrawnCount(type, batchNumber) {
         if (!prizeHistory[type]) return 0;
         
-        // 如果是三等奖且有批次信息
-        const winners = prizeHistory[type];
-        if (type == 3) {
+        // 如果是有批次信息的奖项
+        if (type == 3 || type == 2) {
             // 计算批次已抽取人数
+            const winners = prizeHistory[type];
             const batchWinners = winners.filter(w => w.batch === batchNumber);
             return batchWinners.length;
         }
         
-        return winners.length;
+        return prizeHistory[type].length;
     }
 
     async function batchDraw() {
@@ -973,8 +997,8 @@
         let pool = getLeftPool();
         let countToDraw = Math.min(needed, pool.length);
         
-        // 特殊处理：三等奖分批次抽取
-        if (type == 3 && config.batchSize) {
+        // 特殊处理：有批次信息的奖项
+        if ((type == 3 || type == 2) && config.batchSize) {
             const batchNumber = parseInt(document.getElementById('batch-select').value);
             const batchDrawn = getBatchDrawnCount(type, batchNumber);
             const batchRemaining = config.batchSize - batchDrawn;
@@ -984,7 +1008,8 @@
             
             // 如果当前批次已满，提示用户
             if (batchRemaining <= 0) {
-                alert(`当前批次已抽取${batchDrawn}人，已满${config.batchSize}人，请选择其他批次！`);
+                const batchTerm = type == 3 ? "批" : "轮";
+                alert(`当前第${batchNumber}${batchTerm}已抽取${batchDrawn}人，已满${config.batchSize}人，请选择其他${batchTerm}次！`);
                 return;
             }
         }
@@ -1000,8 +1025,8 @@
 
         if (!prizeHistory[type]) prizeHistory[type] = [];
         
-        // 为三等奖添加批次信息
-        if (type == 3) {
+        // 为有批次信息的奖项添加批次信息
+        if (type == 3 || type == 2) {
             const batchNumber = parseInt(document.getElementById('batch-select').value);
             winners.forEach(winner => {
                 winner.batch = batchNumber;
@@ -1019,9 +1044,10 @@
         
         // 显示批次信息
         let displayTitle = config.name;
-        if (type == 3) {
+        if (type == 3 || type == 2) {
             const batchNumber = parseInt(document.getElementById('batch-select').value);
-            displayTitle = `${config.name}（第${batchNumber}批）`;
+            const batchTerm = type == 3 ? "批" : "轮";
+            displayTitle = `${config.name}（第${batchNumber}${batchTerm}）`;
         }
         
         showWinnersModal(displayTitle, winners, isGrand, type);
@@ -1056,10 +1082,11 @@
             const div = document.createElement('div');
             div.className = 'winner-item';
             
-            // 如果是三等奖且有批次信息，添加批次标记
+            // 如果是有批次信息的奖项，添加批次标记
             let batchBadge = '';
-            if (type == 3 && w.batch) {
-                batchBadge = `<div class="batch-badge batch-${w.batch}">第${w.batch}批</div>`;
+            if ((type == 3 || type == 2) && w.batch) {
+                const batchTerm = type == 3 ? "批" : "轮";
+                batchBadge = `<div class="batch-badge batch-${w.batch}">第${w.batch}${batchTerm}</div>`;
             }
             
             div.innerHTML = `
@@ -1146,18 +1173,19 @@
             const optConfig = PRIZE_CONFIG[optType];
             const drawn = (prizeHistory[optType] || []).length;
             
-            // 特殊处理三等奖的显示
-            if (optType == 3 && optConfig.batchSize) {
+            // 特殊处理有批次信息的奖项显示
+            if ((optType == 3 || optType == 2) && optConfig.batchSize) {
                 // 计算每个批次的抽取情况
                 const batch1Drawn = getBatchDrawnCount(optType, 1);
                 const batch2Drawn = getBatchDrawnCount(optType, 2);
                 const batch1Remaining = Math.max(0, optConfig.batchSize - batch1Drawn);
                 const batch2Remaining = Math.max(0, optConfig.batchSize - batch2Drawn);
+                const batchTerm = optType == 3 ? "批" : "轮";
                 
                 if (drawn >= optConfig.count) {
                     options[i].innerText = `[已完] ${optConfig.name}`;
                 } else {
-                    options[i].innerText = `${optConfig.name} [批1剩${batch1Remaining}/批2剩${batch2Remaining}]`;
+                    options[i].innerText = `${optConfig.name} [第1${batchTerm}剩${batch1Remaining}/第2${batchTerm}剩${batch2Remaining}]`;
                 }
             } else {
                 if (drawn >= optConfig.count) {
@@ -1172,20 +1200,21 @@
         let btnText = "START ENGINE ▶";
         let btnDisabled = false;
         
-        // 特殊处理三等奖
-        if (type == 3 && config.batchSize) {
+        // 特殊处理有批次信息的奖项
+        if ((type == 3 || type == 2) && config.batchSize) {
             const batchNumber = parseInt(document.getElementById('batch-select').value);
             const batchDrawn = getBatchDrawnCount(type, batchNumber);
             const batchRemaining = config.batchSize - batchDrawn;
+            const batchTerm = type == 3 ? "批" : "轮";
             
             if (batchRemaining <= 0) {
-                btnText = "当前批次已满";
+                btnText = `当前第${batchNumber}${batchTerm}已满`;
                 btnDisabled = true;
             } else if (currentDrawn >= config.count) {
                 btnText = "本轮已完结";
                 btnDisabled = true;
             } else {
-                btnText = `抽取第${batchNumber}批（剩${batchRemaining}人）`;
+                btnText = `抽取第${batchNumber}${batchTerm}（剩${batchRemaining}人）`;
                 btnDisabled = false;
             }
         } else if (currentDrawn >= config.count) {
@@ -1225,19 +1254,21 @@
             const config = PRIZE_CONFIG[type];
             if (history.length === 0) return;
             
-            // 特殊处理三等奖的显示（按批次分组）
-            if (type == 3 && config.batchSize) {
+            // 特殊处理有批次信息的奖项显示（按批次分组）
+            if ((type == 3 || type == 2) && config.batchSize) {
+                const batchTerm = type == 3 ? "批" : "轮";
+                
                 // 按批次分组显示
                 const batch1Winners = history.filter(w => w.batch === 1);
                 const batch2Winners = history.filter(w => w.batch === 2);
                 
                 if (batch1Winners.length > 0) {
-                    const li = createHistoryItem(`${config.name}（第一批）`, batch1Winners, type);
+                    const li = createHistoryItem(`${config.name}（第1${batchTerm}）`, batch1Winners, type);
                     list.appendChild(li);
                 }
                 
                 if (batch2Winners.length > 0) {
-                    const li = createHistoryItem(`${config.name}（第二批）`, batch2Winners, type);
+                    const li = createHistoryItem(`${config.name}（第2${batchTerm}）`, batch2Winners, type);
                     list.appendChild(li);
                 }
             } else {
